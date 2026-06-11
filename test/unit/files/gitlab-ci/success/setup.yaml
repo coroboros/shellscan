@@ -1,0 +1,17 @@
+setup-npmrc:
+  image: ${NODEJS_CI_IMAGE}
+  stage: setup
+  # setup a new .npmrc file and replace all .npmrc files content
+  script:
+    - touch .npmrc
+    - |
+      # bash -c will do the expansion for NPM_EXTRA_CONFIG
+      # shellcheck disable=SC2016
+      NPM_EXTRA_CONFIG="${NPM_EXTRA_CONFIG:-}" find . -name .npmrc -exec cp "${NPM_CONFIG_FILE}" {} \; -exec bash -c 'file="$1"; printf "\n${NPM_EXTRA_CONFIG}\n" >> "${file}"' shell {} \;
+    - cat .npmrc
+  artifacts:
+    paths:
+      - ".npmrc"
+      - "**/.npmrc"
+    expire_in: 1 week
+

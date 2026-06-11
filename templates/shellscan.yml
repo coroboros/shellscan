@@ -1,0 +1,36 @@
+spec:
+  inputs:
+    stage:
+      default: test
+      description: Pipeline stage the scan job runs in.
+    mode:
+      default: gitlab-ci
+      description: "Scan target: all, gitlab-ci, shebang, or .sh."
+    security:
+      default: false
+      type: boolean
+      description: Enable security rules for shell embedded in GitLab CI YAML.
+    fail_on_findings:
+      default: false
+      type: boolean
+      description: Fail the job when findings are reported (otherwise findings surface in the MR widget only).
+    image:
+      default: "registry.gitlab.com/coroboros/security/infrastructure/shellscan:1.0.0"
+      description: shellscan image reference.
+---
+shellscan:
+  stage: $[[ inputs.stage ]]
+  image:
+    name: $[[ inputs.image ]]
+    entrypoint: [""]
+  variables:
+    SHELLSCAN_SECURITY: "$[[ inputs.security ]]"
+    SHELLSCAN_FORMAT: codequality
+  script:
+    - shellscan "$[[ inputs.mode ]]" > gl-code-quality-report.json && code=0 || code=$?
+    - if [ "$[[ inputs.fail_on_findings ]]" = "true" ] && [ "$code" = "1" ]; then exit 1; fi
+    - if [ "$code" = "2" ]; then exit 2; fi
+  artifacts:
+    when: always
+    reports:
+      codequality: gl-code-quality-report.json

@@ -1,0 +1,137 @@
+###########################################################################################################################################
+# Stage: notify
+###########################################################################################################################################
+
+.extract-ref: &extract-ref
+  - |
+    release_branch_regex="$(echo "${RELEASE_BRANCH_PATTERN}" | sed -e 's/^.//' -e 's/.$//')"
+    release_source_branch_commit_regex="$(echo "${RELEASE_SOURCE_BRANCH_COMMIT_PATTERN}" | sed -e 's/^.//' -e 's/.$//')"
+
+    if [[ "${CI_COMMIT_REF_NAME}" =~ $release_branch_regex ]]; then
+      ref="${BASH_REMATCH[1]} -> int"
+    elif [[ "${CI_COMMIT_MESSAGE}" =~ $release_source_branch_commit_regex ]]; then
+      ref="${BASH_REMATCH[1]} -> prod"
+    else
+      ref="${CI_COMMIT_REF_NAME}"
+    fi
+  - echo "Notification reference is ${ref}"
+
+.notify-rules: &notify-rules
+  - if: $CI_COMMIT_TAG
+  - if: $CI_COMMIT_REF_NAME == "latest" || $CI_COMMIT_REF_NAME == "stable"
+  - if: $CI_COMMIT_REF_NAME =~ $RELEASE_BRANCH_PATTERN
+  - if: $CI_COMMIT_MESSAGE =~ $RELEASE_SOURCE_BRANCH_COMMIT_PATTERN
+
+.notify-base:
+  image: ${IMAGE_REGISTRY}/coroboros/infrastructure/nodejs-ci:18-alpine
+  stage: notify
+  before_script:
+    - echo "GOOGLE_CHAT_WEBHOOK_URL | ${GOOGLE_CHAT_WEBHOOK_URL}"
+    - echo "SLACK_WEBHOOK_URL       | ${SLACK_WEBHOOK_URL}"
+    - echo "CI_SERVER_URL           | ${CI_SERVER_URL}"
+    - echo "GITLAB_USER_NAME        | ${GITLAB_USER_NAME}"
+  allow_failure: true
+  rules: *notify-rules
+
+
+notify-gchat:
+  extends: .notify-base
+  script:
+    - *extract-ref
+    - >
+      curl -X POST "${GOOGLE_CHAT_WEBHOOK_URL}&threadKey=${CI_PROJECT_NAME}"
+      --header 'Content-Type: application/json; charset=utf-8'
+      --data-binary @- << EOF
+        {
+          "cards": {
+            "header": {
+              "title": "${CI_PROJECT_NAME}",
+              "imageUrl": "https://www.pinclipart.com/picdir/big/528-5285401_success-png-image-correct-icon-png-clipart.png"
+            },
+            "sections": [
+              {
+                "widgets": [
+                  {
+                    "keyValue": {
+                      "topLabel": "Ref",
+                      "content": "<b>${ref}</b>"
+                    }
+                  },
+                  {
+                    "keyValue": {
+                      "topLabel": "Author",
+                      "content": "<b>${GITLAB_USER_NAME:-(none)}</b>"
+                    }
+                  },
+                  {
+                    "buttons": [
+                      {
+                        "textButton": {
+                          "text": "View project",
+                          "onClick": {
+                            "openLink": {
+                              "url": "${CI_SERVER_URL}/${CI_PROJECT_PATH}/-/tree/${CI_COMMIT_REF_NAME}"
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      EOF
+  rules:
+    - *notify-rules
+    - if: $GOOGLE_CHAT_WEBHOOK_URL
+
+notify-slack:
+  extends: .notify-base
+  script:
+    - *extract-ref
+    - >
+      curl -X POST "${SLACK_WEBHOOK_URL}"
+      --header 'Content-Type: application/json; charset=utf-8'
+      --data-binary @- << EOF
+        {
+          "blocks": [
+            {
+              "type": "header",
+              "text": {
+                "type": "plain_text",
+                "text": "✅ ${CI_PROJECT_PATH}",
+                "emoji": true
+              }
+            },
+            {
+              "type": "section",
+              "fields": [
+                {
+                  "type": "mrkdwn",
+                  "text": "*Ref:*\n${ref}"
+                },
+                {
+                  "type": "mrkdwn",
+                  "text": "*Author:*\n${GITLAB_USER_NAME:-(none)}"
+                }
+              ]
+            },
+            {
+              "type": "section",
+              "text": {
+                "type": "mrkdwn",
+                "text": "*Description:*\n${CI_COMMIT_MESSAGE}"
+              }
+            },
+            {
+              "type": "section",
+              "text": {
+                "type": "mrkdwn",
+                "text": "<${CI_SERVER_URL}/${CI_PROJECT_PATH}/-/tree/${CI_COMMIT_REF_NAME}|View project>"
+              }
+            }
+          ]
+        }
+      EOF

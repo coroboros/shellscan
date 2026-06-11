@@ -1,0 +1,4 @@
+#!/bin/sh
+
+dir=$(cd -- "$(dirname -- ".")" && pwd)
+echo "$dir"

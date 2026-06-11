@@ -1,0 +1,4 @@
+#! /bin/dash
+
+dir=$(cd -- "$(dirname -- ".")" && pwd)
+echo "$dir"

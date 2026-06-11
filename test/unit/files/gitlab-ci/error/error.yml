@@ -1,0 +1,55 @@
+---
+.anchor1: &anchor1
+  - |-
+    echo $1
+
+    find . -name *.ogg
+
+.anchor2: &anchor2
+  - |-
+    rm "~/my file.txt"
+
+.template1:
+  image: alpine
+  needs:
+    - job: job1
+      optional: true
+    - job: job2
+      optional: true
+  script:
+    - *anchor1
+    - *anchor2
+
+job2:
+  image: alpine
+  stage: test
+  needs: []
+  script:
+    - *anchor1
+    - npm run lint src/"$VAR1" --strict "${VAR2}" "${VAR3}"
+  rules:
+    - if: $CI_COMMIT_BRANCH
+      exists:
+        - src/
+  allow_failure: true
+  tags:
+    - docker-build
+
+job3:
+  image: alpine
+  stage: test
+  needs: []
+  before_script:
+    - v='--verbose="true"'; cmd $v
+  script:
+    - echo 'Don't forget to restart!'
+  after_script:
+    - echo 'Don\'t try this at home'
+  rules:
+    - if: $VAR4
+      when: never
+    - if: $CI_COMMIT_BRANCH
+      exists:
+        - test/
+  tags:
+    - docker-build

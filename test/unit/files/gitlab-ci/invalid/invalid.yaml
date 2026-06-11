@@ -1,0 +1,113 @@
+---
+.anchor1: &anchor1
+  - |-
+    export VAR1=$(find src/ -type d -exec basename {} \;)
+    cmd="npm run dependency update src/${VAR1}"
+    echo $cmd
+    eval "$cmd"
+
+.anchor2: &anchor2
+  - |-
+    cmd="npm run upgrade ${VAR2} src/${VAR1}"
+    echo $cmd
+    eval "$cmd"
+
+.template1:
+  image: alpine
+  needs:
+    - job: job1
+      optional: true
+    - job: job2
+      optional: true
+  script:
+    - *anchor3
+    - *anchor2
+
+job2:
+  image: alpine
+  stage: test
+  needs: []
+  script:
+    - *anchor3
+    - npm run lint src/"$VAR1" --strict "${VAR3}" "${VAR4}"
+  rules:
+    - if: $CI_COMMIT_BRANCH
+      exists:
+        - src/
+  allow_failure: true
+  tags:
+    - docker-build
+
+job3:
+  image: alpine
+  stage: test
+  needs: []
+  before_script:
+    - mkdir -p ~/npm
+    - chmod 700 ~/npm
+    - eval "$(npm run lint)"
+  script:
+    - *anchor3
+    - cd test && npm ci && npm test
+  rules:
+    - if: $VAR5
+      when: never
+    - if: $CI_COMMIT_BRANCH
+      exists:
+        - test/
+  tags:
+    - docker-build
+
+.anchor4: &anchor4
+  - |-
+    export VAR2="${VAR2}-${CI_ENVIRONMENT_SLUG}"
+    export VAR6="${VAR7}=${VAR2}"
+
+.template2:
+  extends: .template1
+  variables:
+    VAR8: 'src/'
+  rules:
+    - if: $CI_COMMIT_BRANCH
+    - if: $VAR6
+    - if: '$CI_COMMIT_BRANCH =~ $REGEX'
+      exists:
+        - src/
+
+job4:
+  environment:
+    name: $CI_COMMIT_BRANCH
+    url: https://${VAR2}-${CI_ENVIRONMENT_SLUG}.ai
+    on_stop: job5
+    auto_stop_in: 1 month
+  extends: .template2
+  script:
+    - *anchor3
+    - *anchor4
+    - *anchor2
+
+job5:
+  environment:
+    name: $CI_COMMIT_BRANCH
+    action: stop
+  extends: .template2
+  script:
+    - *anchor3
+    - *anchor4
+    - npm uninstall "${VAR2}"
+  when: manual
+
+job-dev:
+  extends: .template1
+  variables:
+    VAR8: 'src/'
+
+job-int:
+  extends: .template1
+  variables:
+    VAR8: 'src/'
+
+job-prod:
+  extends: .template1
+  variables:
+    VAR8: 'src/'

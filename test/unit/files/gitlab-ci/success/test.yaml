@@ -1,0 +1,56 @@
+###########################################################################################################################################
+# Stage: test
+###########################################################################################################################################
+
+# NOTE: a .services should be included from a template
+# or defined at some point to make this template working. See README.md for more info.
+
+variables:
+  DOCKER_TLS_CERTDIR: "/certs"
+  FF_NETWORK_PER_BUILD: "true"
+  KARATE_IMAGE: "${IMAGE_REGISTRY}/coroboros/infrastructure/karate:stable"
+  WAITING_SERVICES_RUNNING_SECONDS: 25
+
+
+test-api-karate:
+  extends:
+    - .base-container-images-rules
+    - .services
+  dependencies:
+    - build-image-name
+    - publish-image
+  image:
+    name: ${KARATE_IMAGE}
+    entrypoint: [""]
+  stage: test
+  before_script:
+    - >
+      echo "function fn() { return { SERVICE_HOST: \"$SERVICE_HOST\" } }" >> karate-config.js
+  script:
+    - sleep "${WAITING_SERVICES_RUNNING_SECONDS}"
+    - karate test/karate/features
+  allow_failure: true
+  rules:
+    - exists:
+        - test/karate/features/*
+
+test-api-postman:
+  extends:
+    - .base-container-images-rules
+    - .services
+  dependencies:
+    - build-image-name
+    - publish-image
+  image:
+    name: ${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/postman/newman:alpine
+    entrypoint: [""]
+  stage: test
+  before_script:
+    - echo "Running API testing with Postman..."
+  script:
+    - sleep "${WAITING_SERVICES_RUNNING_SECONDS}"
+    - for collection in test/postman/*; do newman run --global-var "host=${SERVICE_HOST}" "$collection"; done
+  allow_failure: true
+  rules:
+    - exists:
+        - test/postman/*

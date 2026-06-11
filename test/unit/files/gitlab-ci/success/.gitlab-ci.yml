@@ -1,0 +1,47 @@
+publish-image:
+  extends: .base-container-images-rules
+  needs:
+    - job: build-image-name
+      artifacts: true
+  image:
+    name: gcr.io/kaniko-project/executor:debug
+    entrypoint: [""]
+  stage: publish
+  before_script:
+    - echo "DOCKERFILE_PATH         | ${DOCKERFILE_PATH}"
+    - echo "IMAGE                   | ${IMAGE}"
+    - echo "IMAGE_BUILD_ARGS        | ${IMAGE_BUILD_ARGS}"
+    - echo "IMAGE_EXTRA_TAG         | ${IMAGE_EXTRA_TAG}"
+    - echo "IMAGE_REGISTRY          | ${IMAGE_REGISTRY}"
+    - echo "IMAGE_REGISTRY_USER     | ${IMAGE_REGISTRY_USER}"
+  script:
+    - |-
+      if [ "${DOCKERFILE_PATH}" != "Dockerfile" ]; then
+        cd "$(dirname "${DOCKERFILE_PATH:-.}")" || (echo "unable to change directory for Dockerfile path ${DOCKERFILE_PATH}" && exit 1);
+      fi
+
+      export IMAGE_DESTINATIONS="--destination ${IMAGE} --destination ${IMAGE_NAME}:${IMAGE_REF_TAG}"
+
+      # shellcheck disable=SC2236
+      if [ ! -z "${IMAGE_EXTRA_TAG+x}" ]; then
+        IMAGE_DESTINATIONS="${IMAGE_DESTINATIONS} --destination ${IMAGE_NAME}:${IMAGE_EXTRA_TAG}";
+      fi
+
+      mkdir -p /kaniko/.docker
+      echo "{\"auths\":{\"${IMAGE_REGISTRY}\":{\"auth\":\"$(printf "%s:%s" "${IMAGE_REGISTRY_USER}" "${IMAGE_REGISTRY_PASSWORD}" | base64 | tr -d '\n')\"}}}" > /kaniko/.docker/config.json
+
+      # $IMAGE_BUILD_ARGS requires wordsplitting and unset variable shouldn't be evaluated as a positional argument
+      # shellcheck disable=SC2086
+      build_and_publish="/kaniko/executor
+        --context .
+        --cache=true
+        --cache-repo=${IMAGE_REGISTRY}/coroboros/cache
+        ${IMAGE_REGISTRY_MIRROR}
+        --registry-mirror mirror.gcr.io
+        --registry-mirror index.docker.io
+        --snapshot-mode=redo
+        --use-new-run
+        ${IMAGE_BUILD_ARGS}
+        ${IMAGE_DESTINATIONS}"
+      echo "${build_and_publish}"
+      eval "${build_and_publish//[$'\t\r\n']}"

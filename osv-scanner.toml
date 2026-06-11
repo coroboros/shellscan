@@ -1,0 +1,5 @@
+# Supply-chain gate exceptions — see https://google.github.io/osv-scanner/configuration/
+
+[[IgnoredVulns]]
+id = "GHSA-c2f4-jgmc-q2r5"
+reason = "rexml is pinned <3.4 in the bashcov coverage toolchain (keeps bundler's 3.3.9 over the default gem); the DoS vector needs untrusted XML, here the only input is our own coverage data"

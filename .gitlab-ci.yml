@@ -1,0 +1,66 @@
+include:
+  - project: 'coroboros/ci'
+    file: 'infrastructure/container-images/.gitlab-ci.yml'
+    ref: main
+
+variables:
+  IMAGE_PLATFORM: "linux/amd64,linux/arm64"
+  IMAGE_PUBLIC_REGISTRIES: "ghcr,docker"
+  # renovate: datasource=docker depName=koalaman/shellcheck-alpine
+  SHELLCHECK_IMAGE: "koalaman/shellcheck-alpine:v0.11.0"
+
+check-shell:
+  image:
+    name: ${SHELLCHECK_IMAGE}
+    entrypoint: [""]
+  stage: check
+  script:
+    - /bin/shellcheck src/shellscan.sh
+
+test-shell-unit:
+  image:
+    name: ${SHELLCHECK_IMAGE}
+    entrypoint: [""]
+  stage: test
+  script:
+    - apk update && apk add --no-cache bash fd jq yq
+    - bash test/unit.sh
+
+test-shell-coverage:
+  image: ruby:3.3-slim
+  stage: test
+  allow_failure: false
+  variables:
+    YQ_VERSION: "v4.44.3"
+  script:
+    # Scan tools shellscan shells out to — without them the coverage harness scans nothing.
+    - apt-get update && apt-get install -y --no-install-recommends shellcheck fd-find jq wget ca-certificates
+    - ln -s "$(command -v fdfind)" /usr/local/bin/fd
+    - wget -qO /usr/local/bin/yq "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64" && chmod +x /usr/local/bin/yq
+    - bundle update --bundler && bundle install
+    - groupadd -r bashcov && useradd -r -s /bin/bash -g bashcov bashcov
+    - chown -R bashcov:bashcov /bin/bash /usr/local/bundle
+    - runuser -u bashcov -- bundle exec bashcov --command-name shellscan --mute test/coverage.sh
+  coverage: '/\(\d+\.\d+%\) covered/'
+  artifacts:
+    paths:
+      - coverage/
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage/coverage.xml
+
+# post-publish once the :sha is pushed, so a broken image is never promoted or mirrored.
+test-image:
+  extends:
+    - .docker-service
+  stage: post-publish
+  needs:
+    - job: build-image-name
+      artifacts: true
+    - job: publish-image
+      optional: true
+    - job: merge-image
+      optional: true
+  script:
+    - docker run --rm "${IMAGE}" -h

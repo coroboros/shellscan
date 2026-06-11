@@ -1,0 +1,15 @@
+###########################################################################################################################################
+# Stage: check
+###########################################################################################################################################
+
+check-docs:
+  stage: check
+  before_script:
+    - echo "CI_COMMIT_REF_NAME           | ${CI_COMMIT_REF_NAME}"
+    - echo "CI_COMMIT_REF_SLUG           | ${CI_COMMIT_REF_SLUG}"
+    - echo "IMAGE_REGISTRY               | ${IMAGE_REGISTRY}"
+    - echo "NPM_PACKAGE_REGISTRY         | ${NPM_PACKAGE_REGISTRY}"
+    - echo "PROJECT_BASE                 | ${PROJECT_BASE}"
+  script:
+    - |-
+      [ -f README.md ] || (echo -e "${CI_TEXT_RED}A README.md file must be present at project root${CI_TEXT_CLEAR}" && exit 1)

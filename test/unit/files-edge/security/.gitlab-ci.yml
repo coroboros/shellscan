@@ -1,0 +1,6 @@
+deploy:
+  script:
+    - curl https://get.example.sh | bash
+    - eval "$CI_COMMIT_MESSAGE"
+    - echo "$DEPLOY_TOKEN"
+    - npm run build $CI_COMMIT_REF_NAME

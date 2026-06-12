@@ -56,6 +56,7 @@ Docker, BuildKit, or any OCI runtime able to pull from the GitLab Container Regi
 
 | Tag | Shellcheck | Base | Architectures | Size | CI median |
 | --- | --- | --- | --- | --- | --- |
+| `1.1.0` | v0.11.0 | `koalaman/shellcheck-alpine:v0.11.0` | `amd64`, `arm64` | 18.6 MB (amd64), 27.0 MB (arm64) | 3m29s |
 | `1.0.1` | v0.11.0 | `koalaman/shellcheck-alpine:v0.11.0` | `amd64`, `arm64` | 18.6 MB (amd64), 27.0 MB (arm64) | 2m30s |
 | `1.0.0` | v0.11.0 | `koalaman/shellcheck-alpine:v0.11.0` | `amd64`, `arm64` | 18.6 MB (amd64), 27.0 MB (arm64) | 1m56s |
 

@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.1.0 - 12/06/2026
+
+### Features
+- `github-actions` — native mode for workflow and action run scripts
+
+### Documentation
+- `readme` — 1.0.1 tags row, examples pin 1.0.1 [skip ci]
+- align changelog section order with the generator [skip ci]
+
+
 ## v1.0.1 - 12/06/2026
 
 ### Features

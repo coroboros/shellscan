@@ -1,0 +1,14 @@
+.defaults: &defaults
+  image: alpine
+  before_script:
+    - echo "setup"
+
+build:
+  <<: *defaults
+  script:
+    - echo "build ok"
+
+test:
+  <<: *defaults
+  script:
+    - echo "test ok"

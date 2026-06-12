@@ -1,0 +1,40 @@
+name: build
+on: push
+defaults:
+  run:
+    shell: bash
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: build
+        run: |
+          set -euo pipefail
+          echo "building ${{ github.sha }} on ${{ github.ref_name }}"
+          echo "${{
+            github.sha }}"
+          echo "nested ${{ fromJSON('{"x":{"y":1}}').x.y }}"
+          make build
+      - name: folded clean
+        run: >
+          echo one &&
+          echo two
+      - name: lint
+        run: &lint_cmds |
+          set -euo pipefail
+          echo "linting"
+      - name: windows artifacts
+        shell: pwsh
+        run: Get-ChildItem -Recurse | Where-Object { $_.Name -match '\.log$' }
+  relint:
+    runs-on: ubuntu-latest
+    steps:
+      - run: *lint_cmds
+  package:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: python
+    steps:
+      - run: print("packaged")

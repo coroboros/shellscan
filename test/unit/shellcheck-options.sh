@@ -8,7 +8,7 @@ testScanningAllFilesWithShellcheckOptions() {
   cd "$base_dir"/"$test_files"
   r=$("$script")
   assertEquals 1 "$?"
-  assertContains "$r" "Found 4 error(s) during shell scan."
+  assertContains "$r" "Found 8 error(s) during shell scan."
   export SHELLCHECK_OPTS=""
 }
 

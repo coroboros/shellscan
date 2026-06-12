@@ -6,10 +6,11 @@ set -euo pipefail
 export SHELLCHECK_OPTS=${SHELLCHECK_OPTS:-'--color=always'}
 export TERM=xterm-color
 
-export text_bold="\033[1m"
-export text_normal="\033[0m"
-export text_red="\033[31m"
-export text_yellow="\033[33m"
+export text_bold=$'\033[1m'
+export text_normal=$'\033[0m'
+export text_green=$'\033[32m'
+export text_red=$'\033[31m'
+export text_yellow=$'\033[33m'
 
 mode=${1:-all}
 fd_options=${2:-}
@@ -20,7 +21,7 @@ SHELLSCAN_JOBS=${SHELLSCAN_JOBS:-1}
 SHELLSCAN_FORMAT=${SHELLSCAN_FORMAT:-human}
 # Fingerprints listed here (one per line, # comments allowed) are suppressed in machine formats.
 SHELLSCAN_BASELINE=${SHELLSCAN_BASELINE:-.shellscanignore}
-# Opt-in security rules for shell embedded in GitLab CI YAML (curl|sh, CI-variable injection, ...).
+# Opt-in security rules for shell embedded in CI YAML (curl|sh, CI-variable injection, ...).
 SHELLSCAN_SECURITY=${SHELLSCAN_SECURITY:-0}
 case ${SHELLSCAN_SECURITY} in
   1 | true | yes | on) SHELLSCAN_SECURITY=1 ;;
@@ -35,6 +36,11 @@ case ${SHELLSCAN_FORMAT} in
     exit 2
     ;;
 esac
+
+if ! [[ "${SHELLSCAN_JOBS}" =~ ^[0-9]+$ ]]; then
+  echo "shellscan: SHELLSCAN_JOBS must be a number, got \"${SHELLSCAN_JOBS}\"." >&2
+  exit 2
+fi
 
 # --print0: NUL-delimited discovery, safe for filenames with spaces or newlines in untrusted trees.
 fd_base=(fd --no-ignore --hidden --exclude .git --type file --type symlink --print0)
@@ -101,13 +107,18 @@ export -f _emit_finding
 
 # Run one security rule over an extracted snippet; report each matching line at its YAML source line.
 _security_rule() {
-  local file=$1 selector=$2 base=$3 script=$4 code=$5 level=$6 regex=$7 msg=$8
-  local lineno ln
+  local file=$1 selector=$2 base=$3 script=$4 code=$5 level=$6 regex=$7 msg=$8 mapping=${9:-offset}
+  local lineno ln mark="${text_yellow}!${text_normal}"
+  [[ "${level}" == "error" ]] && mark="${text_red}!${text_normal}"
   while IFS=: read -r lineno _; do
     [[ "${lineno}" =~ ^[0-9]+$ ]] || continue
-    ln=$(( base + lineno - 1 ))
+    if [[ "${mapping}" == "fixed" ]]; then
+      ln=${base}
+    else
+      ln=$(( base + lineno - 1 ))
+    fi
     if [[ "${SHELLSCAN_FORMAT}" == "human" ]]; then
-      _log "$(echo -e "🔒 ${text_yellow}${code}${text_normal} ${file} [${selector}] line ${ln}: ${msg}")"
+      _log "$(echo -e "${mark} ${text_yellow}${code}${text_normal} ${file} [${selector}] line ${ln}: ${msg}")"
       echo SELECTOR_FAIL >> "${SHELLSCAN_RESULTS}"
     else
       _emit_finding "${file}" "${ln}" "${level}" "${code}" "${msg}"
@@ -116,16 +127,24 @@ _security_rule() {
 }
 export -f _security_rule
 
-# Security rules for shell embedded in CI YAML — the class shellcheck does not cover.
+# Security rules for shell embedded in CI YAML — the class shellcheck does not cover. The
+# injection rules are platform-scoped: GitLab variables mean nothing in a workflow and ${{ }}
+# is inert text GitLab never substitutes, so cross-firing would only produce false criticals.
 _security_scan_snippet() {
-  local file=$1 selector=$2 script=$3 base
-  base=$(yq eval "${selector} | line" "${file}" 2> /dev/null) || base=1
+  local file=$1 selector=$2 script=$3 base=${4:-} mapping=${5:-offset} platform=${6:-gitlab}
+  if [[ -z "${base}" ]]; then
+    base=$(yq eval "${selector} | line" "${file}" 2> /dev/null) || base=1
+  fi
   [[ "${base}" =~ ^[0-9]+$ ]] || base=1
 
-  _security_rule "${file}" "${selector}" "${base}" "${script}" SHELLSCAN-CURL-PIPE error '(curl|wget)[^|]*\|[[:space:]]*(sudo[[:space:]]+)?(bash|sh)([^[:alnum:]]|$)' 'Piping a network download into a shell executes unverified remote code.'
-  _security_rule "${file}" "${selector}" "${base}" "${script}" SHELLSCAN-EVAL warning '(^|[^[:alnum:]_])eval[[:space:]].*\$' 'eval on an expanded value runs dynamic, possibly attacker-influenced input as code.'
-  _security_rule "${file}" "${selector}" "${base}" "${script}" SHELLSCAN-SECRET-ECHO warning '(echo|printf)[[:space:]].*\$\{?[A-Za-z_]*(TOKEN|SECRET|PASSWORD|PASSWD|PRIVATE_KEY|API_?KEY|ACCESS_KEY)' 'Printing a secret-named variable risks leaking it to CI job logs.'
-  _security_rule "${file}" "${selector}" "${base}" "${script}" SHELLSCAN-CI-INJECTION warning '(^|[[:space:]=(])\$\{?(CI_COMMIT_REF_NAME|CI_COMMIT_BRANCH|CI_COMMIT_TAG|CI_COMMIT_TITLE|CI_COMMIT_MESSAGE|CI_COMMIT_DESCRIPTION|CI_MERGE_REQUEST_TITLE|CI_MERGE_REQUEST_DESCRIPTION|CI_MERGE_REQUEST_SOURCE_BRANCH_NAME)\}?' 'Unquoted attacker-controllable CI variable can inject shell syntax — quote it.'
+  _security_rule "${file}" "${selector}" "${base}" "${script}" SHELLSCAN-CURL-PIPE error '(curl|wget)[^|]*\|[[:space:]]*(sudo[[:space:]]+)?(bash|sh)([^[:alnum:]]|$)' 'Piping a network download into a shell executes unverified remote code.' "${mapping}"
+  _security_rule "${file}" "${selector}" "${base}" "${script}" SHELLSCAN-EVAL warning '(^|[^[:alnum:]_])eval[[:space:]].*\$' 'eval on an expanded value runs dynamic, possibly attacker-influenced input as code.' "${mapping}"
+  _security_rule "${file}" "${selector}" "${base}" "${script}" SHELLSCAN-SECRET-ECHO warning '(echo|printf)[[:space:]].*\$\{?[A-Za-z_]*(TOKEN|SECRET|PASSWORD|PASSWD|PRIVATE_KEY|API_?KEY|ACCESS_KEY)' 'Printing a secret-named variable risks leaking it to CI job logs.' "${mapping}"
+  if [[ "${platform}" == "gitlab" ]]; then
+    _security_rule "${file}" "${selector}" "${base}" "${script}" SHELLSCAN-CI-INJECTION warning '(^|[[:space:]=(])\$\{?(CI_COMMIT_REF_NAME|CI_COMMIT_BRANCH|CI_COMMIT_TAG|CI_COMMIT_TITLE|CI_COMMIT_MESSAGE|CI_COMMIT_DESCRIPTION|CI_MERGE_REQUEST_TITLE|CI_MERGE_REQUEST_DESCRIPTION|CI_MERGE_REQUEST_SOURCE_BRANCH_NAME)\}?' 'Unquoted attacker-controllable CI variable can inject shell syntax — quote it.' "${mapping}"
+  else
+    _security_rule "${file}" "${selector}" "${base}" "${script}" SHELLSCAN-GHA-INJECTION error '\$\{\{(\}?[^}])*(github\.head_ref|github\.event\.([][A-Za-z0-9_.]*\.)?(title|body|message|page_name|head\.ref|head\.label|head\.repo\.default_branch|head_branch|author\.(name|email)))([^A-Za-z0-9_]|$)' 'GitHub expression of attacker-controllable data is substituted into the script before any shell parses it — quoting cannot help; pass it through an environment variable instead.' "${mapping}"
+  fi
 }
 export -f _security_scan_snippet
 
@@ -157,15 +176,17 @@ export -f _scan_real_file
 # Scan a script extracted from CI YAML. Machine formats remap shellcheck's snippet line numbers
 # back onto the YAML file at the script block's line, and tag each finding with its selector.
 _scan_snippet() {
-  local file=$1 selector=$2 script=$3
+  local file=$1 selector=$2 script=$3 base=${4:-} mapping=${5:-offset} dialect=${6:-bash}
   if [[ "${SHELLSCAN_FORMAT}" == "human" ]]; then
-    printf '%s' "${script}" | shellcheck --shell=bash -
+    printf '%s' "${script}" | shellcheck --shell="${dialect}" -
   else
-    local base json
-    base=$(yq eval "${selector} | line" "${file}" 2> /dev/null) || base=1
+    local json
+    if [[ -z "${base}" ]]; then
+      base=$(yq eval "${selector} | line" "${file}" 2> /dev/null) || base=1
+    fi
     [[ "${base}" =~ ^[0-9]+$ ]] || base=1
-    json=$(printf '%s' "${script}" | shellcheck -f json1 --shell=bash - 2> /dev/null) || true
-    jq -c --arg file "${file}" --arg sel "${selector}" --argjson base "${base}" '.comments[] | {file: $file, line: ($base + .line - 1), endLine: ($base + .endLine - 1), col: .column, endCol: .endColumn, level: .level, code: ("SC" + (.code | tostring)), message: (.message + " [" + $sel + "]"), source: "shellcheck"}' <<< "${json}" >> "${SHELLSCAN_FINDINGS}"
+    json=$(printf '%s' "${script}" | shellcheck -f json1 --shell="${dialect}" - 2> /dev/null) || true
+    jq -c --arg file "${file}" --arg sel "${selector}" --argjson base "${base}" --arg mapping "${mapping}" '.comments[] | {file: $file, line: (if $mapping == "fixed" then $base else $base + .line - 1 end), endLine: (if $mapping == "fixed" then $base else $base + .endLine - 1 end), col: .column, endCol: .endColumn, level: .level, code: ("SC" + (.code | tostring)), message: (.message + " [" + $sel + "]"), source: "shellcheck"}' <<< "${json}" >> "${SHELLSCAN_FINDINGS}"
     [[ "$(jq '.comments | length' <<< "${json}")" -eq 0 ]]
   fi
 }
@@ -196,18 +217,30 @@ _check_one_shebang_file() {
 }
 export -f _check_one_shebang_file
 
+# Fail closed on unparseable YAML: red stderr detail, one SELECTOR_FAIL (human) or one
+# SHELLSCAN-YAML-PARSE finding (machine). The message is identical across modes so one baseline
+# fingerprint suppresses a known-broken file no matter which pass reports it.
+_report_yaml_parse_failure() {
+  local file=$1 detail=$2
+  echo -e "${text_red}✗ Could not parse ${file} to extract embedded script(s) -> ${detail}${text_normal}\n" >&2
+  if [[ "${SHELLSCAN_FORMAT}" == "human" ]]; then
+    echo SELECTOR_FAIL >> "${SHELLSCAN_RESULTS}"
+  else
+    _emit_finding "${file}" 1 error SHELLSCAN-YAML-PARSE "Could not parse ${file} to extract embedded script(s)."
+  fi
+}
+export -f _report_yaml_parse_failure
+
 _check_one_yaml_file() {
   local file=$1
   echo FILE >> "${SHELLSCAN_RESULTS}"
 
-  local selectors selector script
-  if ! selectors=$(yq eval '.[] | select(tag=="!!map") | (.before_script,.script,.after_script) | select(. != null) | path | ".[\"" + join("\"].[\"") + "\"]"' "${file}" 2>&1); then
-    echo -e "🚨 ${text_red}Could not parse ${file} to extract embedded script(s) -> ${selectors}${text_normal}\n" >&2
-    if [[ "${SHELLSCAN_FORMAT}" == "human" ]]; then
-      echo SELECTOR_FAIL >> "${SHELLSCAN_RESULTS}"
-    else
-      _emit_finding "${file}" 1 error SHELLSCAN-YAML-PARSE "Could not parse ${file} to extract embedded script(s)."
-    fi
+  # yq stderr is never data: recent yq warns on stdout-successful runs (merge-key deprecation),
+  # so captures keep stdout pure and refetch stderr only when a command actually failed.
+  local query='.[] | select(tag=="!!map") | (.before_script,.script,.after_script) | select(. != null) | path | ".[\"" + join("\"].[\"") + "\"]"'
+  local selectors selector script detail
+  if ! selectors=$(yq eval "${query}" "${file}" 2> /dev/null); then
+    _report_yaml_parse_failure "${file}" "$(yq eval "${query}" "${file}" 2>&1 > /dev/null | head -1)"
     return 0
   fi
 
@@ -216,8 +249,9 @@ _check_one_yaml_file() {
   fi
 
   for selector in ${selectors}; do
-    if ! script=$(yq eval "${selector} | explode(.) | flatten | join(\"\n\")" "${file}" 2>&1); then
-      _log "$(echo -e "⚠️  ${text_yellow}Could not merge aliases/anchors for the script specified in ${text_bold}${selector}${text_normal} found in ${file} -> ${script}${text_normal}\n")"
+    if ! script=$(yq eval "${selector} | explode(.) | flatten | join(\"\n\")" "${file}" 2> /dev/null); then
+      detail=$(yq eval "${selector} | explode(.) | flatten | join(\"\n\")" "${file}" 2>&1 > /dev/null | head -1)
+      _log "$(echo -e "${text_yellow}! Could not merge aliases/anchors for the script specified in ${text_bold}${selector}${text_normal} found in ${file} -> ${detail}${text_normal}\n")"
       if ! script=$(yq eval "${selector} | join(\"\n\")" "${file}" 2> /dev/null); then
         continue
       fi
@@ -235,6 +269,192 @@ _check_one_yaml_file() {
 }
 export -f _check_one_yaml_file
 
+# GitHub substitutes ${{ }} expressions into the script before any shell parses it — to the
+# linter they are static text, and same-length placeholders keep line and column positions
+# exact. A }} inside a quoted literal does not close the expression, and an expression may
+# span lines: the open line's tail and every wholly-inside line are blanked until the }} line.
+_neutralize_gha_expressions() {
+  local line prefix rest expr tail carry=0
+  # shellcheck disable=SC2016 # single quotes match the literal ${{ and }} delimiters.
+  while IFS= read -r line; do
+    if (( carry )); then
+      if [[ "${line}" == *'}}'* ]]; then
+        expr=${line%%'}}'*}
+        rest=${line#*'}}'}
+        line="$(printf '%*s' "$((${#expr} + 2))" '' | tr ' ' 'x')${rest}"
+        carry=0
+      else
+        line=$(printf '%*s' "${#line}" '' | tr ' ' 'x')
+      fi
+    fi
+    while (( ! carry )) && [[ "${line}" == *'${{'* ]]; do
+      prefix=${line%%'${{'*}
+      rest=${line#*'${{'}
+      if [[ "${rest}" == *'}}'* ]]; then
+        expr=${rest%%'}}'*}
+        tail=${rest:$((${#expr} + 2))}
+        while (( $(tr -cd \' <<< "${expr}" | wc -c) % 2 )) && [[ "${tail}" == *'}}'* ]]; do
+          expr="${expr}}}${tail%%'}}'*}"
+          tail=${tail#*'}}'}
+        done
+        line="${prefix}$(printf '%*s' "$((${#expr} + 5))" '' | tr ' ' 'x')${tail}"
+      else
+        line="${prefix}$(printf '%*s' "$((${#rest} + 3))" '' | tr ' ' 'x')"
+        carry=1
+      fi
+    done
+    printf '%s\n' "${line}"
+  done
+}
+export -f _neutralize_gha_expressions
+
+# The injection rules grep line by line, but a ${{ }} expression may span lines: joining each
+# continuation onto its opening line — blank lines left in place — keeps grep line numbers
+# exact while letting a single-line regex see the whole expression.
+_collapse_gha_expressions() {
+  local line open="" blanks=0 i
+  # shellcheck disable=SC2016 # single quotes match the literal ${{ and }} delimiters.
+  while IFS= read -r line; do
+    if [[ -n "${open}" ]]; then
+      open+=" ${line}"
+      blanks=$((blanks + 1))
+      if [[ "${line}" == *'}}'* ]]; then
+        printf '%s\n' "${open}"
+        for ((i = 0; i < blanks; i++)); do printf '\n'; done
+        open="" blanks=0
+      fi
+      continue
+    fi
+    if [[ "${line}" == *'${{'* && "${line##*'${{'}" != *'}}'* ]]; then
+      open="${line}"
+      continue
+    fi
+    printf '%s\n' "${line}"
+  done
+  if [[ -n "${open}" ]]; then
+    printf '%s\n' "${open}"
+    for ((i = 0; i < blanks; i++)); do printf '\n'; done
+  fi
+}
+export -f _collapse_gha_expressions
+
+_check_one_gha_file() {
+  local file=$1
+  echo FILE >> "${SHELLSCAN_RESULTS}"
+
+  # The document is exploded before path discovery so anchored steps and run aliases resolve;
+  # extraction and the shell cascade below explode the same way. Position queries (line, style,
+  # kind) run on the raw document instead: an exploded alias reports its use-site line but the
+  # anchor's style, which would misplace the +1 block-scalar offset.
+  local query='explode(.) | ((.jobs.[], .runs) | select(tag=="!!map") | .steps.[] | select(tag=="!!map") | .run | select(tag=="!!str")) | path | ".[\"" + join("\"].[\"") + "\"]"'
+  local selectors selector script detail base style kind mapping step job shell prog runner vals lint dialect w words
+  if ! selectors=$(yq eval "${query}" "${file}" 2> /dev/null); then
+    _report_yaml_parse_failure "${file}" "$(yq eval "${query}" "${file}" 2>&1 > /dev/null | head -1)"
+    return 0
+  fi
+
+  if [[ -z "${selectors}" ]]; then
+    return 0
+  fi
+
+  for selector in ${selectors}; do
+    step=${selector%.\[\"run\"\]}
+    job=${step%.\[\"steps\"\]*}
+    # Effective shell cascades step > job defaults > workflow defaults. GitHub accepts custom
+    # templates ("bash -leo pipefail {0}", "/bin/bash -e {0}", "env -S bash {0}") — match on
+    # the program basename, past env options and assignments, so no prefix dodges the scan.
+    shell=$(yq eval "explode(.) | ${step}.[\"shell\"] // ${job}.[\"defaults\"].[\"run\"].[\"shell\"] // .defaults.run.shell // \"\"" "${file}" 2> /dev/null) || shell=""
+    [[ "${shell}" == "null" ]] && shell=""
+    prog=${shell%%[[:space:]]*}
+    prog=${prog##*/}
+    if [[ "${prog}" == "env" ]]; then
+      prog=""
+      read -ra words <<< "${shell}"
+      for w in "${words[@]:1}"; do
+        case ${w} in
+          -* | *=*) ;;
+          *)
+            prog=${w##*/}
+            break
+            ;;
+        esac
+      done
+    fi
+    # The shellcheck pass only makes sense for POSIX-shell steps; the security scan below runs
+    # on every run script regardless — ${{ }} substitution is shell-agnostic.
+    lint=1
+    dialect=bash
+    case ${prog} in
+      bash) ;;
+      sh) dialect='sh' ;;
+      '')
+        # No shell anywhere: GitHub defaults to bash except on Windows runners (pwsh). An
+        # expression-valued runner resolves against its matrix values — the shellcheck pass is
+        # skipped only when every candidate runner is Windows.
+        runner=$(yq eval "explode(.) | ${job}.[\"runs-on\"] // \"\"" "${file}" 2> /dev/null) || runner=""
+        # shellcheck disable=SC2016 # the arm matches a literal ${{ in the runner value.
+        case ${runner} in
+          *[Ww]indows*) lint=0 ;;
+          *'${{'*)
+            if [[ "${runner}" =~ matrix\.([A-Za-z0-9_-]+) ]]; then
+              vals=$(yq eval "explode(.) | ${job}.[\"strategy\"].[\"matrix\"].[\"${BASH_REMATCH[1]}\"] | .[]" "${file}" 2> /dev/null) || vals=""
+              if [[ -n "${vals}" ]] && ! grep -qiv windows <<< "${vals}"; then
+                lint=0
+              fi
+            fi
+            ;;
+        esac
+        ;;
+      *)
+        lint=0
+        # shellcheck disable=SC2016 # matches a literal ${{ in an expression-valued shell.
+        if [[ "${shell}" == *'${{'* ]]; then
+          _log "$(echo -e "${text_yellow}! Cannot resolve the shell ${text_bold}${shell}${text_normal} for ${selector} in ${file} — shellcheck pass skipped.${text_normal}")"
+        fi
+        ;;
+    esac
+    if (( ! lint )) && [[ "${SHELLSCAN_SECURITY}" == "0" ]]; then
+      continue
+    fi
+    if ! script=$(yq eval "explode(.) | ${selector}" "${file}" 2> /dev/null); then
+      detail=$(yq eval "explode(.) | ${selector}" "${file}" 2>&1 > /dev/null | head -1)
+      _log "$(echo -e "${text_yellow}! Could not extract the run script specified in ${text_bold}${selector}${text_normal} found in ${file} -> ${detail}${text_normal}\n")"
+      continue
+    fi
+    # Literal (|) content starts one line below the run key. Aliased runs carry the anchor's
+    # content but the use-site's position; folded (>) scalars collapse source lines; quoted and
+    # plain scalars escape or fold theirs — all pin every finding to one line instead of a
+    # confidently wrong per-line offset.
+    base=$(yq eval "${selector} | line" "${file}" 2> /dev/null) || base=1
+    [[ "${base}" =~ ^[0-9]+$ ]] || base=1
+    style=$(yq eval "${selector} | style" "${file}" 2> /dev/null) || style=""
+    kind=$(yq eval "${selector} | kind" "${file}" 2> /dev/null) || kind=""
+    mapping=offset
+    if [[ "${kind}" == "alias" ]]; then
+      mapping=fixed
+    elif [[ "${style}" == "folded" ]]; then
+      base=$((base + 1))
+      mapping=fixed
+    elif [[ "${style}" == "literal" ]]; then
+      base=$((base + 1))
+    elif [[ "${script}" == *$'\n'* ]]; then
+      mapping=fixed
+    fi
+    if (( lint )); then
+      if ! _scan_snippet "${file}" "${selector}" "$(printf '%s\n' "${script}" | _neutralize_gha_expressions)" "${base}" "${mapping}" "${dialect}"; then
+        if [[ "${SHELLSCAN_FORMAT}" == "human" ]]; then
+          echo -e "${text_red}Above issue(s) found in ${file} in the script specified in ${text_bold}${selector}${text_normal}\n\n"
+          echo SELECTOR_FAIL >> "${SHELLSCAN_RESULTS}"
+        fi
+      fi
+    fi
+    if [[ "${SHELLSCAN_SECURITY}" != "0" ]]; then
+      _security_scan_snippet "${file}" "${selector}" "$(printf '%s\n' "${script}" | _collapse_gha_expressions)" "${base}" "${mapping}" github
+    fi
+  done
+}
+export -f _check_one_gha_file
+
 _run() {
   local worker=$1
   local pattern=${2:-}
@@ -247,7 +467,7 @@ _run() {
   listing=$(mktemp "${TMPDIR:-/tmp}/shellscan.XXXXXX")
   SHELLSCAN_TMPS+=("${listing}")
   if ! discover_files "${pattern}" > "${listing}"; then
-    echo -e "🚨 ${text_red}File discovery failed (fd exited non-zero). Aborting scan.${text_normal}" >&2
+    echo -e "${text_red}✗ File discovery failed (fd exited non-zero). Aborting scan.${text_normal}" >&2
     exit 2
   fi
 
@@ -270,7 +490,20 @@ check_gitlab_ci_scripts() {
   nb_errors=$(grep -c '^SELECTOR_FAIL$' "${SHELLSCAN_RESULTS}" 2> /dev/null) || nb_errors=0
 
   total_errors=$((total_errors + nb_errors))
-  _log "✅ Checked $nb_files GitLab CI YAML file(s) with potential scripts embedded. Selectors in error: $nb_errors."
+  _log "${text_green}✓${text_normal} Checked $nb_files GitLab CI YAML file(s) with potential scripts embedded. Selectors in error: $nb_errors."
+}
+
+check_github_actions_scripts() {
+  _log "Checking run scripts embedded in GitHub Actions YAML files..."
+  _run _check_one_gha_file '\.yaml$|\.yml$'
+
+  local nb_files=0
+  local nb_errors=0
+  nb_files=$(grep -c '^FILE$' "${SHELLSCAN_RESULTS}" 2> /dev/null) || nb_files=0
+  nb_errors=$(grep -c '^SELECTOR_FAIL$' "${SHELLSCAN_RESULTS}" 2> /dev/null) || nb_errors=0
+
+  total_errors=$((total_errors + nb_errors))
+  _log "${text_green}✓${text_normal} Checked $nb_files GitHub Actions YAML file(s) with potential run scripts embedded. Selectors in error: $nb_errors."
 }
 
 check_shebang_files() {
@@ -283,7 +516,7 @@ check_shebang_files() {
   nb_errors=$(grep -c '^FAIL$' "${SHELLSCAN_RESULTS}" 2> /dev/null) || nb_errors=0
 
   total_errors=$((total_errors + nb_errors))
-  _log "✅ Checked $nb_files file(s) with a shell shebang. Errors: $nb_errors."
+  _log "${text_green}✓${text_normal} Checked $nb_files file(s) with a shell shebang. Errors: $nb_errors."
 }
 
 check_sh_files() {
@@ -296,11 +529,12 @@ check_sh_files() {
   nb_errors=$(grep -c '^FAIL$' "${SHELLSCAN_RESULTS}" 2> /dev/null) || nb_errors=0
 
   total_errors=$((total_errors + nb_errors))
-  _log "✅ Checked $nb_files .sh file(s). Errors: $nb_errors."
+  _log "${text_green}✓${text_normal} Checked $nb_files .sh file(s). Errors: $nb_errors."
 }
 
 check_all() {
   check_gitlab_ci_scripts
+  check_github_actions_scripts
   check_shebang_files
   check_sh_files
 }
@@ -338,10 +572,10 @@ _render() {
   esac
 
   if (( count > 0 )); then
-    echo "🚨 ${count} finding(s)." >&2
+    echo "${text_red}✗${text_normal} ${count} finding(s)." >&2
     exit 1
   fi
-  echo "✅ Shell scan succeeded." >&2
+  echo "${text_green}✓${text_normal} Shell scan succeeded." >&2
   exit 0
 }
 
@@ -352,7 +586,7 @@ shellscan - scan shell files or shell scripts embedded in files
 shellscan [mode] [fd_options]
 
 mode
-    Scripts or files to scan. One of: all (default), gitlab-ci, shebang, .sh.
+    Scripts or files to scan. One of: all (default), gitlab-ci, github-actions, shebang, .sh.
 
 fd_options
     Extra options for fd (https://github.com/sharkdp/fd), the file-discovery program.
@@ -367,7 +601,7 @@ Environment:
     SHELLSCAN_JOBS    Parallel scan workers (default: 1). Above 1 speeds up large scans; shellcheck output interleaves across files.
     SHELLSCAN_FORMAT  Output format: human (default), codequality (GitLab Code Quality JSON), or sarif (SARIF 2.1.0).
     SHELLSCAN_BASELINE  Baseline file of fingerprints to suppress in machine formats (default: .shellscanignore).
-    SHELLSCAN_SECURITY  Set to 1 to enable security rules for shell embedded in GitLab CI YAML.
+    SHELLSCAN_SECURITY  Set to 1 to enable security rules for shell embedded in CI YAML (GitLab CI, GitHub Actions).
 
 Exit codes:
     0   scan succeeded, no findings.
@@ -379,6 +613,7 @@ EOF
 case ${mode} in
   all) check_all ;;
   gitlab-ci) check_gitlab_ci_scripts ;;
+  github-actions) check_github_actions_scripts ;;
   shebang) check_shebang_files ;;
   .sh) check_sh_files ;;
   -h) print_help; exit 0 ;;
@@ -394,9 +629,9 @@ if [[ "${SHELLSCAN_FORMAT}" != "human" ]]; then
 fi
 
 if (( total_errors > 0 )); then
-  echo "🚨 Found $total_errors error(s) during shell scan."
+  echo "${text_red}✗${text_normal} Found $total_errors error(s) during shell scan."
   exit 1
 fi
 
-echo "✅ Shell scan succeeded."
+echo "${text_green}✓${text_normal} Shell scan succeeded."
 exit 0

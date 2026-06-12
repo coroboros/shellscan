@@ -4,3 +4,4 @@ deploy:
     - eval "$CI_COMMIT_MESSAGE"
     - echo "$DEPLOY_TOKEN"
     - npm run build $CI_COMMIT_REF_NAME
+    - echo 'run echo "${{ github.event.pull_request.title }}"' >> mirror-workflow.yml

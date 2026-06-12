@@ -31,6 +31,12 @@ testUnknownFormatRejected() {
   assertEquals 2 "$?"
 }
 
+testNonNumericJobsRejected() {
+  cd "$base_dir"/test/unit/files/shell/success
+  SHELLSCAN_JOBS=abc "$script" .sh >/dev/null 2>&1
+  assertEquals 2 "$?"
+}
+
 testBaselineSuppressesFinding() {
   cd "$base_dir"/test/unit/files/shell/error
   out=$(SHELLSCAN_FORMAT=codequality "$script" .sh 2>/dev/null)

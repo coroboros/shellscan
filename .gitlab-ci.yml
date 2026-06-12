@@ -6,6 +6,8 @@ include:
 variables:
   IMAGE_PLATFORM: "linux/amd64,linux/arm64"
   IMAGE_PUBLIC_REGISTRIES: "ghcr,docker"
+  # .pre-commit-hooks.yaml, templates/ and skills/ pins fall under the detected defaults.
+  RELEASE_VERSION_PIN_FILES: "README.md"
   # renovate: datasource=docker depName=koalaman/shellcheck-alpine
   SHELLCHECK_IMAGE: "koalaman/shellcheck-alpine:v0.11.0"
 

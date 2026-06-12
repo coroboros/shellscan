@@ -17,6 +17,10 @@ fe="${root}/test/unit/files-edge"
 ( cd "${f}/gitlab-ci/success" && "${sc}" gitlab-ci ) || true
 ( cd "${f}/gitlab-ci/error" && "${sc}" gitlab-ci ) || true
 ( cd "${f}/gitlab-ci/invalid" && "${sc}" gitlab-ci ) || true
+( cd "${f}/github-actions/success" && "${sc}" github-actions ) || true
+( cd "${f}/github-actions/error" && "${sc}" github-actions ) || true
+( cd "${f}/github-actions/invalid" && "${sc}" github-actions ) || true
+( cd "${f}/github-actions/error" && SHELLSCAN_FORMAT=codequality "${sc}" github-actions ) || true
 ( cd "${fe}" && "${sc}" all ) || true
 ( cd "${f}/shell/success" && "${sc}" .sh '--extension sh' ) || true
 ( cd "${f}/shell/success" && "${sc}" .sh '--max-depth=1' ) || true
@@ -27,6 +31,8 @@ fe="${root}/test/unit/files-edge"
 ( cd "${f}/gitlab-ci/error" && SHELLSCAN_FORMAT=sarif "${sc}" gitlab-ci ) || true
 ( cd "${fe}/security" && SHELLSCAN_SECURITY=1 "${sc}" gitlab-ci ) || true
 ( cd "${fe}/security" && SHELLSCAN_SECURITY=1 SHELLSCAN_FORMAT=codequality "${sc}" gitlab-ci ) || true
+( cd "${fe}/security" && SHELLSCAN_SECURITY=1 "${sc}" github-actions ) || true
+( cd "${fe}/security" && SHELLSCAN_SECURITY=1 SHELLSCAN_FORMAT=codequality "${sc}" github-actions ) || true
 SHELLSCAN_FORMAT=bogus "${sc}" .sh || true
 ( cd "${f}/shell/success" && SHELLSCAN_FORMAT=codequality "${sc}" .sh ) || true
 ( cd "${f}/shell/success" && "${sc}" .sh '-x echo' ) || true

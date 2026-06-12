@@ -4,11 +4,12 @@ FROM koalaman/shellcheck-alpine:v0.11.0@sha256:9955be09ea7f0dbf7ae942ac1f2094355
 
 ARG REVISION=""
 ARG CREATED=""
+ARG VERSION=""
 
 LABEL org.opencontainers.image.title="shellscan" \
-      org.opencontainers.image.description="Coroboros shellscan — context-aware shellcheck for shell + GitLab CI YAML" \
+      org.opencontainers.image.description="Coroboros shellscan — context-aware shellcheck for shell + CI YAML (GitLab CI, GitHub Actions)" \
       org.opencontainers.image.source="https://gitlab.com/coroboros/security/infrastructure/shellscan" \
-      org.opencontainers.image.version="1.0.0" \
+      org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.licenses="Apache-2.0" \
       org.opencontainers.image.authors="Coroboros <ob@coroboros.com>" \
       org.opencontainers.image.vendor="Coroboros" \

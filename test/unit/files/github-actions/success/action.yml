@@ -1,0 +1,13 @@
+name: setup
+description: Install the toolchain.
+runs:
+  using: composite
+  steps:
+    - name: install
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "installing on ${{ runner.os }}"
+    - name: windows install
+      shell: pwsh
+      run: Write-Host (Get-Date).ToString()

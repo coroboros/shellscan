@@ -1,0 +1,50 @@
+name: deploy
+on: push
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: unquoted
+        run: |
+          rm -rf $BUILD_DIR
+          cp $SRC $DST
+      - name: workspace copy
+        run: cp ${{ github.workspace }}/dist $TARGET
+      - name: apostrophe
+        run: echo 'don't stop'
+      - name: anchored
+        run: &broken_cmds mv $A $B
+      - name: path shell
+        shell: /bin/bash -e {0}
+        run: echo $UNSAFE_PATH_SHELL
+      - name: env shell
+        shell: env -S bash -e {0}
+        run: echo $UNSAFE_ENV_SHELL
+      - name: posix dialect
+        shell: sh
+        run: '[[ -n $POSIX_VAR ]] && echo y'
+      - name: quoted multiline
+        run: "echo ok\ncp $SRC2 $DST2"
+  relint:
+    runs-on: ubuntu-latest
+    steps:
+      - run: *broken_cmds
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: powershell by default
+        run: Write-Host (Get-Date).ToString()
+  winmatrix:
+    strategy:
+      matrix:
+        os: [windows-latest, windows-2025]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - run: Write-Host (Get-Date).ToString()
+  custommatrix:
+    strategy:
+      matrix:
+        os: [windows-latest, bigsur-selfhosted]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - run: cp $CUSTOM_SRC $CUSTOM_DST

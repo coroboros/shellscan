@@ -8,7 +8,7 @@ cd "$base_dir"/"$test_files"
 testScanningAllFiles() {
   r=$("$script" all)
   assertEquals 1 "$?"
-  assertContains "$r" "Found 12 error(s) during shell scan."
+  assertContains "$r" "Found 25 error(s) during shell scan."
 }
 
 testScanningAllFilesByDefault() {
@@ -24,8 +24,15 @@ testScanningAllFilesByDefault() {
 testScanningOnlyGitlabCIFiles() {
   r=$("$script" gitlab-ci)
   assertEquals 1 "$?"
-  assertContains "$r" "Checked 7 GitLab CI YAML file(s) with potential scripts embedded. Selectors in error: 6."
-  assertContains "$r" "Found 6 error(s) during shell scan."
+  assertContains "$r" "Checked 12 GitLab CI YAML file(s) with potential scripts embedded. Selectors in error: 7."
+  assertContains "$r" "Found 7 error(s) during shell scan."
+}
+
+testScanningOnlyGithubActionsFiles() {
+  r=$("$script" github-actions)
+  assertEquals 1 "$?"
+  assertContains "$r" "Checked 12 GitHub Actions YAML file(s) with potential run scripts embedded. Selectors in error: 12."
+  assertContains "$r" "Found 12 error(s) during shell scan."
 }
 
 testScanningOnlyShellFiles() {

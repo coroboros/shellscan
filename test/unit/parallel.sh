@@ -11,22 +11,22 @@ testParallelAllMatchesSequentialCount() {
   r2=$(SHELLSCAN_JOBS=4 "$script" all)
   rc2=$?
   assertEquals "$rc1" "$rc2"
-  assertContains "$r1" "Found 12 error(s) during shell scan."
-  assertContains "$r2" "Found 12 error(s) during shell scan."
+  assertContains "$r1" "Found 25 error(s) during shell scan."
+  assertContains "$r2" "Found 25 error(s) during shell scan."
 }
 
 testParallelGitlabCIDeterministic() {
   r1=$(SHELLSCAN_JOBS=4 "$script" gitlab-ci)
   assertEquals 1 "$?"
-  assertContains "$r1" "Checked 7 GitLab CI YAML file(s) with potential scripts embedded. Selectors in error: 6."
+  assertContains "$r1" "Checked 12 GitLab CI YAML file(s) with potential scripts embedded. Selectors in error: 7."
 
   r2=$(SHELLSCAN_JOBS=4 "$script" gitlab-ci)
   assertEquals 1 "$?"
-  assertContains "$r2" "Checked 7 GitLab CI YAML file(s) with potential scripts embedded. Selectors in error: 6."
+  assertContains "$r2" "Checked 12 GitLab CI YAML file(s) with potential scripts embedded. Selectors in error: 7."
 
   r3=$(SHELLSCAN_JOBS=4 "$script" gitlab-ci)
   assertEquals 1 "$?"
-  assertContains "$r3" "Checked 7 GitLab CI YAML file(s) with potential scripts embedded. Selectors in error: 6."
+  assertContains "$r3" "Checked 12 GitLab CI YAML file(s) with potential scripts embedded. Selectors in error: 7."
 }
 
 testParallelShebangCount() {
@@ -44,7 +44,7 @@ testParallelShFilesCount() {
 testParallelHighJobsStillCorrect() {
   r=$(SHELLSCAN_JOBS=16 "$script" all)
   assertEquals 1 "$?"
-  assertContains "$r" "Found 12 error(s) during shell scan."
+  assertContains "$r" "Found 25 error(s) during shell scan."
 }
 
 source "$base_dir"/test/unit/shunit2

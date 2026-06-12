@@ -11,8 +11,8 @@ testSmokeSequentialVsParallelEquivalent() {
   r2=$(SHELLSCAN_JOBS=4 "$script" all)
   rc2=$?
   assertEquals "$rc1" "$rc2"
-  assertContains "$r1" "Found 12 error(s) during shell scan."
-  assertContains "$r2" "Found 12 error(s) during shell scan."
+  assertContains "$r1" "Found 25 error(s) during shell scan."
+  assertContains "$r2" "Found 25 error(s) during shell scan."
 }
 
 testSmokeHelpDoesNotLeaveTempfile() {

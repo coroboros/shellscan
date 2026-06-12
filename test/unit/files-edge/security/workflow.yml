@@ -1,0 +1,17 @@
+name: triage
+on: pull_request_target
+jobs:
+  greet:
+    runs-on: ubuntu-latest
+    steps:
+      - name: comment
+        run: |
+          echo "Reviewing ${{ github.event.pull_request.title }}"
+          curl -fsSL https://get.example.sh | bash
+      - name: wrapped expression
+        run: |
+          echo "Reviewing ${{
+            github.event.pull_request.title }}"
+      - name: windows greet
+        shell: pwsh
+        run: Write-Host "${{ github.head_ref }}"

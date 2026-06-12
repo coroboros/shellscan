@@ -7,7 +7,7 @@ testScanningAllGitlabCIFiles() {
   cd "$base_dir"/"$test_files"
   r=$("$script" gitlab-ci)
   assertEquals 1 "$?"
-  assertContains "$r" "Checked 7 GitLab CI YAML file(s) with potential scripts embedded. Selectors in error: 6."
+  assertContains "$r" "Checked 8 GitLab CI YAML file(s) with potential scripts embedded. Selectors in error: 6."
 }
 
 testScanningGitlabCIInvalidFiles() {
@@ -36,7 +36,7 @@ testScanningGitlabCIFilesWithSuccess() {
   cd "$base_dir"/"$test_files"/success
   r=$("$script" gitlab-ci)
   assertEquals 0 "$?"
-  assertContains "$r" "Checked 5 GitLab CI YAML file(s) with potential scripts embedded. Selectors in error: 0."
+  assertContains "$r" "Checked 6 GitLab CI YAML file(s) with potential scripts embedded. Selectors in error: 0."
 }
 
 source "$base_dir"/test/unit/shunit2

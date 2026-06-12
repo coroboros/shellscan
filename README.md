@@ -55,9 +55,9 @@ Docker, BuildKit, or any OCI runtime able to pull from the GitLab Container Regi
 
 | Tag | Shellcheck | Base | Architectures | Size | CI median |
 | --- | --- | --- | --- | --- | --- |
-| `1.0.0` | v0.11.0 | `koalaman/shellcheck-alpine:v0.11.0` | `amd64`, `arm64` | — | — |
+| `1.0.0` | v0.11.0 | `koalaman/shellcheck-alpine:v0.11.0` | `amd64`, `arm64` | 18.6 MB (amd64), 27.0 MB (arm64) | 1m56s |
 
-Per-arch sizes and the CI median land here on the first multi-arch release. Beyond the SemVer tags, `main` tracks the latest green build (rolling) and every build is tagged by its `<sha>` (immutable).
+Sizes from the GitLab Container Registry. CI median computed over the 10 most recent successful pipelines on `main`. Beyond the SemVer tags, `main` tracks the latest green build (rolling) and every build is tagged by its `<sha>` (immutable).
 
 ## Commands
 

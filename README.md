@@ -31,6 +31,7 @@ Alpine-based image wrapping [`shellcheck`](https://github.com/koalaman/shellchec
 - [Run](#run)
 - [Reports](#reports)
 - [Security rules](#security-rules)
+- [Agents](#agents)
 - [Packages](#packages)
 - [Provenance](#provenance)
 - [Compared to alternatives](#compared-to-alternatives)
@@ -290,6 +291,16 @@ Every finding carries a stable SHA-256 fingerprint of its file, rule, and messag
 | `SHELLSCAN-CI-INJECTION` | major | Unquoted attacker-controllable CI variable (`CI_COMMIT_MESSAGE`, `CI_MERGE_REQUEST_TITLE`, branch and tag names) — a crafted commit injects shell syntax into the job. |
 
 Each finding reports the YAML source line. The rules run on extracted scripts only — `.sh` and shebang files already get the full shellcheck treatment.
+
+## Agents
+
+shellscan ships an agent skill — its own scan-and-triage guide — for coding agents. Install it into an agent:
+
+```sh
+npx skills add https://gitlab.com/coroboros/security/infrastructure/shellscan
+```
+
+Or read it without installing: [`skills/shellscan/SKILL.md`](skills/shellscan/SKILL.md).
 
 ## Packages
 

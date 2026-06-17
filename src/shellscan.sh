@@ -99,7 +99,6 @@ _sha256() {
   fi
 }
 
-# Append one normalized finding from shellscan's own rules.
 _emit_finding() {
   jq -nc --arg file "$1" --argjson line "$2" --arg level "$3" --arg code "$4" --arg message "$5" '{file: $file, line: $line, endLine: $line, col: 1, endCol: 1, level: $level, code: $code, message: $message, source: "shellscan"}' >> "${SHELLSCAN_FINDINGS}"
 }
@@ -539,7 +538,6 @@ check_all() {
   check_sh_files
 }
 
-# Severity-mapped, baseline-filtered render of the collected findings to the requested machine format.
 _render() {
   local enriched baseline_set=""
   enriched=$(mktemp "${TMPDIR:-/tmp}/shellscan.XXXXXX")

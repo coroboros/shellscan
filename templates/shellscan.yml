@@ -1,11 +1,21 @@
 spec:
   inputs:
+    job_name:
+      default: shellscan
+      regex: '^[A-Za-z0-9_.:-]+$'
+      description: Job name — override to include the component more than once in one pipeline.
     stage:
       default: test
+      regex: '^[A-Za-z0-9_.:-]+$'
       description: Pipeline stage the scan job runs in.
     mode:
-      default: gitlab-ci
-      description: "Scan target: all, gitlab-ci, github-actions, shebang, or .sh."
+      default: all
+      options: ["all", "gitlab-ci", "github-actions", "shebang", ".sh"]
+      description: "Scan target: all (default), gitlab-ci, github-actions, shebang, or .sh."
+    fd_options:
+      default: ""
+      regex: '^[^"''\r\n]*$'
+      description: 'Extra fd options as one quoted arg, e.g. "--exclude vendor". Command-execution flags are refused.'
     security:
       default: false
       type: boolean
@@ -13,24 +23,45 @@ spec:
     fail_on_findings:
       default: false
       type: boolean
-      description: Fail the job when findings are reported (otherwise findings surface in the MR widget only).
+      description: Fail the job on findings (otherwise findings surface in the merge request widget only).
+    jobs:
+      default: 1
+      type: number
+      description: Parallel scan workers (SHELLSCAN_JOBS). Above 1 speeds up large scans.
+    shellcheck_opts:
+      default: ""
+      regex: '^[^"''\r\n]*$'
+      description: 'Extra options for shellcheck (SHELLCHECK_OPTS), e.g. "--severity=warning".'
+    baseline:
+      default: ""
+      regex: '^[^"''\r\n]*$'
+      description: 'Baseline of finding fingerprints to suppress (SHELLSCAN_BASELINE). Empty uses the default .shellscanignore.'
     image:
-      default: "registry.gitlab.com/coroboros/security/infrastructure/shellscan:1.1.0"
+      default: "registry.gitlab.com/coroboros/security/infrastructure/shellscan:1.2.0"
+      regex: '^[^"''\r\n]+$'
       description: shellscan image reference.
 ---
-shellscan:
+"$[[ inputs.job_name ]]":
   stage: $[[ inputs.stage ]]
   image:
     name: $[[ inputs.image ]]
     entrypoint: [""]
+  interruptible: true
   variables:
+    SHELLSCAN_MODE: "$[[ inputs.mode ]]"
+    SHELLSCAN_FD_OPTIONS: "$[[ inputs.fd_options ]]"
     SHELLSCAN_SECURITY: "$[[ inputs.security ]]"
     SHELLSCAN_FORMAT: codequality
+    SHELLSCAN_JOBS: "$[[ inputs.jobs ]]"
+    SHELLCHECK_OPTS: "$[[ inputs.shellcheck_opts ]]"
+    SHELLSCAN_BASELINE: "$[[ inputs.baseline ]]"
   script:
-    - shellscan "$[[ inputs.mode ]]" > gl-code-quality-report.json && code=0 || code=$?
+    - shellscan "${SHELLSCAN_MODE}" "${SHELLSCAN_FD_OPTIONS}" > gl-code-quality-report.json && code=0 || code=$?
     - if [ "$[[ inputs.fail_on_findings ]]" = "true" ] && [ "$code" = "1" ]; then exit 1; fi
     - if [ "$code" = "2" ]; then exit 2; fi
   artifacts:
     when: always
+    paths:
+      - gl-code-quality-report.json
     reports:
       codequality: gl-code-quality-report.json

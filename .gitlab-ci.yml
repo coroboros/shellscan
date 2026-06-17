@@ -55,7 +55,7 @@ test-shell-coverage:
 # post-publish once the :sha is pushed, so a broken image is never promoted or mirrored.
 test-image:
   extends:
-    - .docker-service
+    - .base-docker-service
   stage: post-publish
   needs:
     - job: build-image-name

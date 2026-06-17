@@ -7,7 +7,7 @@
 
 **Find and lint every shell in a project — `.sh` files, shebangs, and scripts embedded in GitLab CI and GitHub Actions YAML.**
 
-An Alpine-based image wraps [`shellcheck`](https://github.com/koalaman/shellcheck) with four discovery modes: `.sh` files, files with a shell shebang (`/bin/bash` and `env bash` forms), and shell scripts embedded in CI YAML — GitLab CI `before_script` / `script` / `after_script` keys and GitHub Actions `run` steps — extracted via [`yq`](https://github.com/mikefarah/yq), with YAML anchors expanded. File discovery uses [`fd`](https://github.com/sharkdp/fd). Findings render as terminal output, [GitLab Code Quality JSON for the merge-request widget, or SARIF 2.1.0 for GitHub code scanning](#reports); embedded-script findings map back to their YAML source lines. Opt-in [security rules](#security-rules) flag remote code piped into a shell, secrets echoed to job logs, unquoted attacker-controllable CI variables, and GitHub expressions injecting untrusted data into `run` scripts.
+An Alpine-based image wraps [`shellcheck`](https://github.com/koalaman/shellcheck) with four discovery modes: `.sh` files, files with a shell shebang (`/bin/bash` and `env bash` forms), and shell scripts embedded in CI YAML — GitLab CI `before_script` / `script` / `after_script` keys and GitHub Actions `run` steps — extracted via [`yq`](https://github.com/mikefarah/yq), with YAML anchors expanded. File discovery uses [`fd`](https://github.com/sharkdp/fd). Findings render as terminal output, [GitLab Code Quality JSON for the merge request widget, or SARIF 2.1.0 for GitHub code scanning](#reports); embedded-script findings map back to their YAML source lines. Opt-in [security rules](#security-rules) flag remote code piped into a shell, secrets echoed to job logs, unquoted attacker-controllable CI variables, and GitHub expressions injecting untrusted data into `run` scripts.
 
 [![latest](https://img.shields.io/gitlab/v/release/coroboros%2Fsecurity%2Finfrastructure%2Fshellscan?style=flat-square&label=latest&color=000000)](https://gitlab.com/coroboros/security/infrastructure/shellscan/-/releases)
 [![pipeline](https://img.shields.io/gitlab/pipeline-status/coroboros%2Fsecurity%2Finfrastructure%2Fshellscan?branch=main&style=flat-square&label=pipeline&color=000000)](https://gitlab.com/coroboros/security/infrastructure/shellscan/-/pipelines)
@@ -41,7 +41,7 @@ An Alpine-based image wraps [`shellcheck`](https://github.com/koalaman/shellchec
 
 ## Requirements
 
-Docker, BuildKit, or any OCI runtime able to pull from the GitLab Container Registry.
+Docker, BuildKit, or any OCI runtime able to pull from the GitHub Container Registry (or the Docker Hub mirror).
 
 ## Image
 
@@ -56,11 +56,12 @@ Docker, BuildKit, or any OCI runtime able to pull from the GitLab Container Regi
 
 | Tag | Shellcheck | Base | Architectures | Size | CI median |
 | --- | --- | --- | --- | --- | --- |
+| `1.2.0` | v0.11.0 | `koalaman/shellcheck-alpine:v0.11.0` | `amd64`, `arm64` | — | — |
 | `1.1.0` | v0.11.0 | `koalaman/shellcheck-alpine:v0.11.0` | `amd64`, `arm64` | 18.6 MB (amd64), 27.0 MB (arm64) | 3m29s |
 | `1.0.1` | v0.11.0 | `koalaman/shellcheck-alpine:v0.11.0` | `amd64`, `arm64` | 18.6 MB (amd64), 27.0 MB (arm64) | 2m30s |
 | `1.0.0` | v0.11.0 | `koalaman/shellcheck-alpine:v0.11.0` | `amd64`, `arm64` | 18.6 MB (amd64), 27.0 MB (arm64) | 1m56s |
 
-Sizes from the GitLab Container Registry. CI median computed over the 10 most recent successful pipelines on `main`. Beyond the SemVer tags, `main` tracks the latest green build (rolling) and every build is tagged by its `<sha>` (immutable).
+Sizes from the GitLab Container Registry. CI median computed over the 10 most recent successful pipelines on `main`. A dash marks pending release metrics. Beyond the SemVer tags, `main` tracks the latest green build (rolling) and every build is tagged by its `<sha>` (immutable).
 
 ## Commands
 
@@ -157,7 +158,7 @@ shellscan github-actions > shellscan.sarif
 ```yaml
 check-sh-files:
   image:
-    name: registry.gitlab.com/coroboros/security/infrastructure/shellscan:1.1.0
+    name: registry.gitlab.com/coroboros/security/infrastructure/shellscan:1.2.0
     entrypoint: [""]
   stage: check
   variables:
@@ -171,7 +172,7 @@ check-sh-files:
 ```yaml
 check-ci-yaml-files:
   image:
-    name: registry.gitlab.com/coroboros/security/infrastructure/shellscan:1.1.0
+    name: registry.gitlab.com/coroboros/security/infrastructure/shellscan:1.2.0
     entrypoint: [""]
   stage: check
   script:
@@ -181,7 +182,7 @@ check-ci-yaml-files:
 ```yaml
 check-files-with-shebang:
   image:
-    name: registry.gitlab.com/coroboros/security/infrastructure/shellscan:1.1.0
+    name: registry.gitlab.com/coroboros/security/infrastructure/shellscan:1.2.0
     entrypoint: [""]
   stage: check
   script:
@@ -192,7 +193,7 @@ check-files-with-shebang:
 ```yaml
 parallel-scan:
   image:
-    name: registry.gitlab.com/coroboros/security/infrastructure/shellscan:1.1.0
+    name: registry.gitlab.com/coroboros/security/infrastructure/shellscan:1.2.0
     entrypoint: [""]
   stage: check
   variables:
@@ -208,17 +209,18 @@ parallel-scan:
 
 <br>
 
-One include wires the scan with a Code Quality report consumed by the MR widget. Findings are non-blocking by default; set `fail_on_findings: true` to gate the pipeline.
+One include runs the scan and publishes a Code Quality report for the merge request widget. Findings are non-blocking by default; set `fail_on_findings: true` to gate the pipeline.
 
 ```yaml
 include:
-  - component: gitlab.com/coroboros/security/infrastructure/shellscan/shellscan@1.1.0
+  - component: gitlab.com/coroboros/security/infrastructure/shellscan/shellscan@1.2.0
     inputs:
-      mode: all
       security: true
 ```
 
-Inputs: `stage`, `mode`, `security`, `fail_on_findings`, `image` — see [`templates/shellscan.yml`](templates/shellscan.yml).
+The final `/shellscan` segment is the component name from `templates/shellscan.yml`; GitLab component refs are `<fqdn>/<project-path>/<component-name>@<version>`.
+
+Inputs: `job_name`, `stage`, `mode`, `fd_options`, `security`, `fail_on_findings`, `jobs`, `shellcheck_opts`, `baseline`, `image` — see [`templates/shellscan.yml`](templates/shellscan.yml).
 
 </details>
 
@@ -241,7 +243,7 @@ jobs:
         run: |
           docker run --rm -v "$PWD:/shellscan" \
             -e SHELLSCAN_SECURITY=1 -e SHELLSCAN_FORMAT=sarif \
-            ghcr.io/coroboros/shellscan:1.1.0 all > shellscan.sarif || [ $? -eq 1 ]
+            ghcr.io/coroboros/shellscan:1.2.0 all > shellscan.sarif || [ $? -eq 1 ]
       - uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: shellscan.sarif
@@ -259,7 +261,7 @@ The hook runs the published image — nothing to build or install locally beyond
 ```yaml
 repos:
   - repo: https://gitlab.com/coroboros/security/infrastructure/shellscan
-    rev: 1.1.0
+    rev: 1.2.0
     hooks:
       - id: shellscan
 ```
@@ -276,13 +278,13 @@ Mount the project as the `/shellscan` volume and run any mode:
 ```shell
 docker run --rm \
   -v "$PWD:/shellscan" \
-  registry.gitlab.com/coroboros/security/infrastructure/shellscan:1.1.0
+  registry.gitlab.com/coroboros/security/infrastructure/shellscan:1.2.0
 ```
 
 ```shell
 docker run --rm \
   -v "$PWD:/shellscan" \
-  registry.gitlab.com/coroboros/security/infrastructure/shellscan:1.1.0 \
+  registry.gitlab.com/coroboros/security/infrastructure/shellscan:1.2.0 \
   gitlab-ci '--exclude "*.yaml"'
 ```
 
@@ -297,7 +299,7 @@ Wire the Code Quality report into a job and findings surface in the merge reques
 ```yaml
 shellscan:
   image:
-    name: registry.gitlab.com/coroboros/security/infrastructure/shellscan:1.1.0
+    name: registry.gitlab.com/coroboros/security/infrastructure/shellscan:1.2.0
     entrypoint: [""]
   stage: check
   variables:
@@ -353,13 +355,22 @@ Same across all shellscan tags.
 
 ## Provenance
 
-Every published image is, via the shared [`coroboros/ci`](https://gitlab.com/coroboros/ci) `container-images` template:
+Every published image, via the shared [`coroboros/ci`](https://gitlab.com/coroboros/ci) `container-images` template, is:
 
 - **multi-arch** — BuildKit, `linux/amd64,linux/arm64`;
-- **scanned** — Trivy (OS CVEs) behind a blocking secrets + CVE gate (gitleaks, osv-scanner), so a vulnerable image is never promoted to the consumed tag;
+- **gated** — source secrets via `gitleaks`, image CVEs via Trivy on the published `:sha`, and the image smoke before tag promotion;
 - **signed** — cosign keyless on the immutable digest, with a **CycloneDX SBOM** attestation.
 
-The signed digest is published to `ghcr.io/coroboros/shellscan` and mirrored to `docker.io/coroboros/shellscan` on a version tag. Pin the `@sha256` digest downstream for byte-reproducible scans.
+The signed digest is published to `ghcr.io/coroboros/shellscan` and mirrored to `docker.io/coroboros/shellscan` on version tags. Pin the `@sha256` digest downstream for byte-reproducible scans.
+
+A cosign signature is bound to the digest, not the tag — verify the pinned digest:
+
+```sh
+cosign verify \
+  --certificate-identity-regexp 'https://gitlab.com/coroboros/security/infrastructure/shellscan//.*' \
+  --certificate-oidc-issuer https://gitlab.com \
+  ghcr.io/coroboros/shellscan@sha256:<manifest-list-digest>
+```
 
 ## Compared to alternatives
 
@@ -377,7 +388,7 @@ The signed digest is published to `ghcr.io/coroboros/shellscan` and mirrored to 
 | Security rules on CI-embedded shell | no | no | no | no | no | GH untrusted inputs | yes |
 | Baseline file for incremental adoption | no | no | no | no | no | no | yes |
 
-The unique angle: shellscan finds shell **wherever it lives** in a project — including the often-overlooked scripts hidden inside CI YAML — runs it through the canonical `shellcheck` linter with YAML anchors expanded, and reports findings where reviewers look: the MR Code Quality widget, GitHub code scanning, or the terminal. [`actionlint`](https://github.com/rhysd/actionlint) proved the demand for linting shell inside CI config on GitHub Actions; shellscan covers both platforms in one scanner, with platform-aware security rules on top.
+The unique angle: shellscan finds shell **wherever it lives** in a project — including the often-overlooked scripts hidden inside CI YAML — runs it through the canonical `shellcheck` linter with YAML anchors expanded, and reports findings where reviewers look: GitLab Code Quality, GitHub code scanning, or the terminal. [`actionlint`](https://github.com/rhysd/actionlint) proved the demand for linting shell inside CI config on GitHub Actions; shellscan covers both platforms in one scanner, with platform-aware security rules on top.
 
 ## Security
 
@@ -385,9 +396,9 @@ Report a vulnerability privately via the [security policy](SECURITY.md) — **ob
 
 ## Contributing
 
-Bug reports and MRs welcome.
+Bug reports and merge requests welcome.
 
-- Open an issue before submitting non-trivial MRs.
+- Open an issue before submitting non-trivial merge requests.
 - Commits follow [Conventional Commits](https://www.conventionalcommits.org/).
 - Sign off each commit (DCO): `git commit -s`.
 - Target the `main` branch.

@@ -20,7 +20,7 @@ of the project to scan:
 ```sh
 docker run --rm -v "$PWD:/shellscan" \
   -e SHELLSCAN_SECURITY=1 -e SHELLSCAN_FORMAT=codequality \
-  registry.gitlab.com/coroboros/security/infrastructure/shellscan:1.1.0 \
+  registry.gitlab.com/coroboros/security/infrastructure/shellscan:1.2.0 \
   all > report.json || [ $? -eq 1 ]
 ```
 

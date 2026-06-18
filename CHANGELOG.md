@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.2.1 - 18/06/2026
+
+### Documentation
+- `image` — restore tag metadata
+
+### Configuration
+- `release` — gate README release refs [skip ci]
+
+
 ## v1.2.0 - 17/06/2026
 
 ### Features

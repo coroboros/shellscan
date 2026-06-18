@@ -1,6 +1,6 @@
 - id: shellscan
   name: shellscan
   description: Find and lint every shell in a project — .sh files, shebangs, and scripts embedded in GitLab CI and GitHub Actions YAML.
-  entry: registry.gitlab.com/coroboros/security/infrastructure/shellscan:1.2.0
-  language: docker_image
+  entry: shellscan
+  language: docker
   pass_filenames: false

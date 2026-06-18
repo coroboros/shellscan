@@ -1,16 +1,14 @@
 ---
 name: shellscan
-description: Find and lint every shell in a project — `.sh` files, files with a shell shebang, and scripts embedded in GitLab CI or GitHub Actions YAML — by running the shellscan scanner (shellcheck with YAML extraction, anchors expanded, opt-in security rules for the CI injection surface), then triaging the findings into a plain-language read with the exact fixes. Use whenever someone wants shell linted, checked, or audited — "shellcheck this repo", "lint my scripts", "check the shell in my .gitlab-ci.yml", "lint my workflows", "is this pipeline shell safe", "audit the CI scripts before we go public" — even when they only name shellcheck, ask generally whether their pipeline scripts are secure, or want a shell-quality gate that only fails on new findings.
+description: Run shellscan to lint shell in `.sh` files, shebang files, GitLab CI YAML, and GitHub Actions YAML, then triage the findings with exact fixes. Use whenever the user asks to shellcheck, lint, audit, or secure shell scripts, `.gitlab-ci.yml`, workflows, or CI run blocks, even when they only mention shellcheck or ask whether pipeline shell is safe.
 ---
 
 # shellscan
 
-Finds shell wherever it lives — `.sh` files, shebang files, scripts embedded in
-GitLab CI and GitHub Actions YAML (anchors expanded, `${{ }}` expressions
-neutralized) — and runs it through shellcheck, plus security rules for the CI
-injection surface shellcheck has no opinion on. The scanner does the detection;
-this skill adds the judgment: choosing the right scan, reading the report, and
-saying what matters.
+Finds shell wherever it lives — `.sh` files, shebang files, GitLab CI YAML, and
+GitHub Actions YAML — then runs shellcheck plus CI injection rules. The scanner
+does the extraction and report generation; this skill chooses the scan mode,
+reads the report, and states what matters.
 
 ## Run
 
@@ -29,8 +27,8 @@ scan still surfaces. Without Docker, a checkout of
 [the shellscan repo](https://gitlab.com/coroboros/security/infrastructure/shellscan)
 runs the same scan from the target project root — `bash <checkout>/src/shellscan.sh` —
 if `shellcheck`, `yq` (mikefarah v4), `fd`, and `jq` are on PATH. If neither path
-works, stop and say what is missing — a hand-rolled shellcheck pass misses the
-embedded CI shell, the anchors, and the security rules, so it reports a false
+works, stop and name the missing dependency. A plain shellcheck pass misses
+embedded CI shell, anchors, and security rules, so it can report a false
 all-clear.
 
 Pick the mode from the ask: `all` (default) covers everything; `gitlab-ci` /

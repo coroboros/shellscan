@@ -54,13 +54,13 @@ Docker, BuildKit, or any OCI runtime able to pull from the GitHub Container Regi
 
 ## Tags
 
-| Tag | Source | Mutability |
-| --- | --- | --- |
-| `<version>` | SemVer git tag | immutable |
-| `main` | latest green `main` build | rolling |
-| `<sha>` | every build | immutable |
+| Tag | Base | Architectures | Size | Source | Mutability |
+| --- | --- | --- | --- | --- | --- |
+| `<version>` | [`koalaman/shellcheck-alpine:v0.11.0`](Dockerfile#L3) | `amd64`, `arm64` | 18.6 MB (amd64), 27.0 MB (arm64) | SemVer git tag | immutable |
+| `main` | same as `<version>` | same as `<version>` | varies by build | latest green `main` build | rolling |
+| `<sha>` | same as `<version>` | same as `<version>` | varies by build | every build | immutable |
 
-Use the latest release badge for the current SemVer tag. Pin a digest for reproducible builds; see [Provenance](#provenance).
+Sizes are compressed layer sums from GHCR. The base image source of truth is the `FROM` line in the `Dockerfile`. Pin a digest for reproducible builds; see [Provenance](#provenance).
 
 ## Commands
 

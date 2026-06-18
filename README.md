@@ -54,14 +54,13 @@ Docker, BuildKit, or any OCI runtime able to pull from the GitHub Container Regi
 
 ## Tags
 
-| Tag | Shellcheck | Base | Architectures | Size | CI median |
-| --- | --- | --- | --- | --- | --- |
-| `1.2.0` | v0.11.0 | `koalaman/shellcheck-alpine:v0.11.0` | `amd64`, `arm64` | — | — |
-| `1.1.0` | v0.11.0 | `koalaman/shellcheck-alpine:v0.11.0` | `amd64`, `arm64` | 18.6 MB (amd64), 27.0 MB (arm64) | 3m29s |
-| `1.0.1` | v0.11.0 | `koalaman/shellcheck-alpine:v0.11.0` | `amd64`, `arm64` | 18.6 MB (amd64), 27.0 MB (arm64) | 2m30s |
-| `1.0.0` | v0.11.0 | `koalaman/shellcheck-alpine:v0.11.0` | `amd64`, `arm64` | 18.6 MB (amd64), 27.0 MB (arm64) | 1m56s |
+| Tag | Source | Mutability |
+| --- | --- | --- |
+| `<version>` | SemVer git tag | immutable |
+| `main` | latest green `main` build | rolling |
+| `<sha>` | every build | immutable |
 
-Sizes from the GitLab Container Registry. CI median computed over the 10 most recent successful pipelines on `main`. A dash marks pending release metrics. Beyond the SemVer tags, `main` tracks the latest green build (rolling) and every build is tagged by its `<sha>` (immutable).
+Use the latest release badge for the current SemVer tag. Pin a digest for reproducible builds; see [Provenance](#provenance).
 
 ## Commands
 
@@ -158,7 +157,7 @@ shellscan github-actions > shellscan.sarif
 ```yaml
 check-sh-files:
   image:
-    name: registry.gitlab.com/coroboros/security/infrastructure/shellscan:1.2.0
+    name: registry.gitlab.com/coroboros/security/infrastructure/shellscan:<version>
     entrypoint: [""]
   stage: check
   variables:
@@ -172,7 +171,7 @@ check-sh-files:
 ```yaml
 check-ci-yaml-files:
   image:
-    name: registry.gitlab.com/coroboros/security/infrastructure/shellscan:1.2.0
+    name: registry.gitlab.com/coroboros/security/infrastructure/shellscan:<version>
     entrypoint: [""]
   stage: check
   script:
@@ -182,7 +181,7 @@ check-ci-yaml-files:
 ```yaml
 check-files-with-shebang:
   image:
-    name: registry.gitlab.com/coroboros/security/infrastructure/shellscan:1.2.0
+    name: registry.gitlab.com/coroboros/security/infrastructure/shellscan:<version>
     entrypoint: [""]
   stage: check
   script:
@@ -193,7 +192,7 @@ check-files-with-shebang:
 ```yaml
 parallel-scan:
   image:
-    name: registry.gitlab.com/coroboros/security/infrastructure/shellscan:1.2.0
+    name: registry.gitlab.com/coroboros/security/infrastructure/shellscan:<version>
     entrypoint: [""]
   stage: check
   variables:
@@ -213,7 +212,7 @@ One include runs the scan and publishes a Code Quality report for the merge requ
 
 ```yaml
 include:
-  - component: gitlab.com/coroboros/security/infrastructure/shellscan/shellscan@1.2.0
+  - component: gitlab.com/coroboros/security/infrastructure/shellscan/shellscan@<version>
     inputs:
       security: true
 ```
@@ -243,7 +242,7 @@ jobs:
         run: |
           docker run --rm -v "$PWD:/shellscan" \
             -e SHELLSCAN_SECURITY=1 -e SHELLSCAN_FORMAT=sarif \
-            ghcr.io/coroboros/shellscan:1.2.0 all > shellscan.sarif || [ $? -eq 1 ]
+            ghcr.io/coroboros/shellscan:<version> all > shellscan.sarif || [ $? -eq 1 ]
       - uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: shellscan.sarif
@@ -256,12 +255,12 @@ jobs:
 
 <br>
 
-The hook runs the published image — nothing to build or install locally beyond Docker.
+The hook builds from the pinned repo `rev` — Docker is the only local runtime dependency.
 
 ```yaml
 repos:
   - repo: https://gitlab.com/coroboros/security/infrastructure/shellscan
-    rev: 1.2.0
+    rev: <version>
     hooks:
       - id: shellscan
 ```
@@ -278,13 +277,13 @@ Mount the project as the `/shellscan` volume and run any mode:
 ```shell
 docker run --rm \
   -v "$PWD:/shellscan" \
-  registry.gitlab.com/coroboros/security/infrastructure/shellscan:1.2.0
+  registry.gitlab.com/coroboros/security/infrastructure/shellscan:<version>
 ```
 
 ```shell
 docker run --rm \
   -v "$PWD:/shellscan" \
-  registry.gitlab.com/coroboros/security/infrastructure/shellscan:1.2.0 \
+  registry.gitlab.com/coroboros/security/infrastructure/shellscan:<version> \
   gitlab-ci '--exclude "*.yaml"'
 ```
 
@@ -299,7 +298,7 @@ Wire the Code Quality report into a job and findings surface in the merge reques
 ```yaml
 shellscan:
   image:
-    name: registry.gitlab.com/coroboros/security/infrastructure/shellscan:1.2.0
+    name: registry.gitlab.com/coroboros/security/infrastructure/shellscan:<version>
     entrypoint: [""]
   stage: check
   variables:

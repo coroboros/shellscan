@@ -1,4 +1,5 @@
 spec:
+  component: [version]
   inputs:
     job_name:
       default: shellscan
@@ -37,9 +38,9 @@ spec:
       regex: '^[^"''\r\n]*$'
       description: 'Baseline of finding fingerprints to suppress (SHELLSCAN_BASELINE). Empty uses the default .shellscanignore.'
     image:
-      default: "registry.gitlab.com/coroboros/security/infrastructure/shellscan:1.2.0"
+      default: "registry.gitlab.com/coroboros/security/infrastructure/shellscan:$[[ component.version ]]"
       regex: '^[^"''\r\n]+$'
-      description: shellscan image reference.
+      description: shellscan image reference. Branch or SHA component refs must pass this input explicitly.
 ---
 "$[[ inputs.job_name ]]":
   stage: $[[ inputs.stage ]]

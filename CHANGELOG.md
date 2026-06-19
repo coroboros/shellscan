@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.2.2 - 19/06/2026
+
+### Documentation
+- use image tag placeholder
+
+
 ## v1.2.1 - 18/06/2026
 
 ### Documentation

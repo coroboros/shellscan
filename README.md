@@ -334,7 +334,7 @@ Each finding reports the YAML source line. The rules run on extracted scripts on
 shellscan ships an agent skill — its own scan-and-triage guide — for coding agents. Install it into an agent:
 
 ```sh
-npx skills add https://gitlab.com/coroboros/security/infrastructure/shellscan
+npx skills add coroboros/shellscan
 ```
 
 Or read it without installing: [`skills/shellscan/SKILL.md`](skills/shellscan/SKILL.md).

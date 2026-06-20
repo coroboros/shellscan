@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.2.3 - 20/06/2026
+
+### Documentation
+- use GitHub skill install
+
+
 ## v1.2.2 - 19/06/2026
 
 ### Documentation

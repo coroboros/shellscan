@@ -360,7 +360,7 @@ Every published image, via the shared [`coroboros/ci`](https://gitlab.com/corobo
 - **gated** — source secrets via `gitleaks`, image CVEs via Trivy on the published `:sha`, and the image smoke before tag promotion;
 - **signed** — cosign keyless on the immutable digest, with a **CycloneDX SBOM** attestation.
 
-The signed digest is published to `ghcr.io/coroboros/shellscan` and mirrored to `docker.io/coroboros/shellscan` on version tags. Pin the `@sha256` digest downstream for byte-reproducible scans.
+On version tags, the promoted digest is published to the GitLab Registry, GitHub Container Registry, and Docker Hub. Each registry-local digest is signed and attested after copy. Pin the `@sha256` digest downstream for byte-reproducible scans.
 
 A cosign signature is bound to the digest, not the tag — verify the pinned digest:
 

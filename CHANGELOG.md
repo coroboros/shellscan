@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.2.4 - 21/06/2026
+
+### Documentation
+- clarify public mirror signing
+
+
 ## v1.2.3 - 20/06/2026
 
 ### Documentation

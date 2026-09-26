@@ -1,0 +1,15 @@
+spec:
+  inputs:
+    environment:
+      default: test
+---
+
+deploy:
+  script:
+    - |-
+      echo $CI_COMMIT_REF_NAME
+
+---
+deploy:
+  script:
+    - echo $CI_COMMIT_BRANCH

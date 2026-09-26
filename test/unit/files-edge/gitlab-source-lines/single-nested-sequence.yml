@@ -1,0 +1,5 @@
+nested:
+  script:
+    -
+      - echo "$SAFE"
+      - echo $CI_COMMIT_DESCRIPTION

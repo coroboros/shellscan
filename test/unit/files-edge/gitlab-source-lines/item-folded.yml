@@ -1,0 +1,5 @@
+folded:
+  script:
+    - >-
+      echo "$SAFE" &&
+      echo $CI_COMMIT_TITLE

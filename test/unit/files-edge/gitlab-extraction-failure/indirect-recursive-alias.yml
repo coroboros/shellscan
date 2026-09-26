@@ -1,0 +1,7 @@
+.recursive: &recursive
+  - *recursive
+.middle: &middle
+  - *recursive
+
+indirect:
+  script: *middle

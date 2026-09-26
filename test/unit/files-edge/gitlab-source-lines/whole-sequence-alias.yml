@@ -1,0 +1,6 @@
+.commands: &commands
+  - |-
+    echo $CI_COMMIT_TITLE
+
+alias:
+  script: *commands

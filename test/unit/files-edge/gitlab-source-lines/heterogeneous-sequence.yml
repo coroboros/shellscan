@@ -1,0 +1,5 @@
+mixed:
+  script:
+    - echo "$SAFE"
+    - |-
+      echo $CI_MERGE_REQUEST_TITLE

@@ -1,0 +1,2 @@
+scalar:
+  script: echo $CI_COMMIT_BRANCH

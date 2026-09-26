@@ -1,0 +1,22 @@
+spec:
+  inputs:
+    environment:
+      default: test
+---
+.shared:
+  script:
+    - echo "$CI_COMMIT_BRANCH"
+
+deploy:
+  before_script:
+    - echo setup
+  script: !reference [.shared, script]
+  after_script:
+    - echo complete
+
+verify:
+  script:
+    - !reference [.shared, script]
+
+empty:
+  script: []

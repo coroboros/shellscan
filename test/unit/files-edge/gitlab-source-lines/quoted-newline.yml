@@ -1,0 +1,3 @@
+quoted:
+  script:
+    - "echo \"$SAFE\"\necho $CI_COMMIT_TITLE"

@@ -1,0 +1,8 @@
+gapped:
+  script:
+    - echo "$SAFE"
+
+    - echo "$ALSO_SAFE"
+      && echo "$MORE_SAFE"
+
+    - echo $CI_COMMIT_TAG

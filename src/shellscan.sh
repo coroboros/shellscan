@@ -45,9 +45,7 @@ fi
 # --print0: NUL-delimited discovery, safe for filenames with spaces or newlines in untrusted trees.
 fd_base=(fd --no-ignore --hidden --exclude .git --type file --type symlink --print0)
 
-# fd options are whitespace-split and passed verbatim — no shell glob or eval, so a crafted
-# filename in the scanned tree can never become an fd argument. fd matches its own patterns.
-# Command-execution flags are refused: shellscan never runs commands from a scanned tree.
+# Split fd options without evaluating shell syntax; reject command-execution flags.
 declare -a fd_args=()
 if [[ -n "${fd_options}" ]]; then
   read -ra fd_args <<< "${fd_options}"
@@ -126,15 +124,9 @@ _security_rule() {
 }
 export -f _security_rule
 
-# Security rules for shell embedded in CI YAML — the class shellcheck does not cover. The
-# injection rules are platform-scoped: GitLab variables mean nothing in a workflow and ${{ }}
-# is inert text GitLab never substitutes, so cross-firing would only produce false criticals.
+# Injection rules are platform-scoped to avoid matching inert CI syntax.
 _security_scan_snippet() {
-  local file=$1 selector=$2 script=$3 base=${4:-} mapping=${5:-offset} platform=${6:-gitlab}
-  if [[ -z "${base}" ]]; then
-    base=$(yq eval "${selector} | line" "${file}" 2> /dev/null) || base=1
-  fi
-  [[ "${base}" =~ ^[0-9]+$ ]] || base=1
+  local file=$1 selector=$2 script=$3 base=$4 mapping=${5:-offset} platform=${6:-gitlab}
 
   _security_rule "${file}" "${selector}" "${base}" "${script}" SHELLSCAN-CURL-PIPE error '(curl|wget)[^|]*\|[[:space:]]*(sudo[[:space:]]+)?(bash|sh)([^[:alnum:]]|$)' 'Piping a network download into a shell executes unverified remote code.' "${mapping}"
   _security_rule "${file}" "${selector}" "${base}" "${script}" SHELLSCAN-EVAL warning '(^|[^[:alnum:]_])eval[[:space:]].*\$' 'eval on an expanded value runs dynamic, possibly attacker-influenced input as code.' "${mapping}"
@@ -157,8 +149,7 @@ discover_files() {
 }
 export -f discover_files
 
-# Scan a real file: human prints shellcheck, machine formats collect json1 findings. Returns
-# non-zero when the file has findings, so callers can tally pass/fail identically in both modes.
+# Both output modes retain ShellCheck's pass/fail status.
 _scan_real_file() {
   local file=$1
   if [[ "${SHELLSCAN_FORMAT}" == "human" ]]; then
@@ -172,18 +163,13 @@ _scan_real_file() {
 }
 export -f _scan_real_file
 
-# Scan a script extracted from CI YAML. Machine formats remap shellcheck's snippet line numbers
-# back onto the YAML file at the script block's line, and tag each finding with its selector.
+# Report extracted scripts at their original YAML positions.
 _scan_snippet() {
-  local file=$1 selector=$2 script=$3 base=${4:-} mapping=${5:-offset} dialect=${6:-bash}
+  local file=$1 selector=$2 script=$3 base=$4 mapping=${5:-offset} dialect=${6:-bash}
   if [[ "${SHELLSCAN_FORMAT}" == "human" ]]; then
     printf '%s' "${script}" | shellcheck --shell="${dialect}" -
   else
     local json
-    if [[ -z "${base}" ]]; then
-      base=$(yq eval "${selector} | line" "${file}" 2> /dev/null) || base=1
-    fi
-    [[ "${base}" =~ ^[0-9]+$ ]] || base=1
     json=$(printf '%s' "${script}" | shellcheck -f json1 --shell="${dialect}" - 2> /dev/null) || true
     jq -c --arg file "${file}" --arg sel "${selector}" --argjson base "${base}" --arg mapping "${mapping}" '.comments[] | {file: $file, line: (if $mapping == "fixed" then $base else $base + .line - 1 end), endLine: (if $mapping == "fixed" then $base else $base + .endLine - 1 end), col: .column, endCol: .endColumn, level: .level, code: ("SC" + (.code | tostring)), message: (.message + " [" + $sel + "]"), source: "shellcheck"}' <<< "${json}" >> "${SHELLSCAN_FINDINGS}"
     [[ "$(jq '.comments | length' <<< "${json}")" -eq 0 ]]
@@ -216,9 +202,7 @@ _check_one_shebang_file() {
 }
 export -f _check_one_shebang_file
 
-# Fail closed on unparseable YAML: red stderr detail, one SELECTOR_FAIL (human) or one
-# SHELLSCAN-YAML-PARSE finding (machine). The message is identical across modes so one baseline
-# fingerprint suppresses a known-broken file no matter which pass reports it.
+# Use one parse-failure message so baselines match across scan modes.
 _report_yaml_parse_failure() {
   local file=$1 detail=$2
   echo -e "${text_red}✗ Could not parse ${file} to extract embedded script(s) -> ${detail}${text_normal}\n" >&2
@@ -230,16 +214,21 @@ _report_yaml_parse_failure() {
 }
 export -f _report_yaml_parse_failure
 
+# GitLab CI extraction
+
 _check_one_yaml_file() {
   local file=$1
   echo FILE >> "${SHELLSCAN_RESULTS}"
 
-  # yq stderr is never data: recent yq warns on stdout-successful runs (merge-key deprecation),
-  # so captures keep stdout pure and refetch stderr only when a command actually failed.
-  local query='.[] | select(tag=="!!map") | (.before_script,.script,.after_script) | select(. != null) | path | ".[\"" + join("\"].[\"") + "\"]"'
-  local selectors selector script detail
-  if ! selectors=$(yq eval "${query}" "${file}" 2> /dev/null); then
-    _report_yaml_parse_failure "${file}" "$(yq eval "${query}" "${file}" 2>&1 > /dev/null | head -1)"
+  # Keep yq warnings out of successful extraction output.
+  local query='.[] | select(tag=="!!map") | (.before_script,.script,.after_script) | select(. != null) | {"document": documentIndex, "selector": (path | ".[\"" + join("\"].[\"") + "\"]")}'
+  # shellcheck disable=SC2016 # yq variables are literal and evaluated by yq.
+  local cycle_query='.. | select(anchor != "") as $node | ($node | anchor) as $name | $node | .. | select(kind == "alias" and alias == $name) | alias'
+  local normalize='select([..] | all_c(tag == "!!seq" or tag == "!!str" or (tag == "!reference" and kind == "seq"))) | ((select(kind == "seq") | flatten | join("\n")) // select(tag == "!!str"))'
+  local selectors recursive_alias entry document selector document_selector extract_query fallback_query script detail base
+  local style kind item_count mapping
+  if ! selectors=$(yq eval -o=json -I=0 "${query}" "${file}" 2> /dev/null); then
+    _report_yaml_parse_failure "${file}" "$(yq eval -o=json -I=0 "${query}" "${file}" 2>&1 > /dev/null | head -1)"
     return 0
   fi
 
@@ -247,31 +236,73 @@ _check_one_yaml_file() {
     return 0
   fi
 
-  for selector in ${selectors}; do
-    if ! script=$(yq eval "${selector} | explode(.) | flatten | join(\"\n\")" "${file}" 2> /dev/null); then
-      detail=$(yq eval "${selector} | explode(.) | flatten | join(\"\n\")" "${file}" 2>&1 > /dev/null | head -1)
-      _log "$(echo -e "${text_yellow}! Could not merge aliases/anchors for the script specified in ${text_bold}${selector}${text_normal} found in ${file} -> ${detail}${text_normal}\n")"
-      if ! script=$(yq eval "${selector} | join(\"\n\")" "${file}" 2> /dev/null); then
+  if ! recursive_alias=$(yq eval "${cycle_query}" "${file}" 2> /dev/null); then
+    detail=$(yq eval "${cycle_query}" "${file}" 2>&1 > /dev/null | head -1) || true
+    _report_yaml_parse_failure "${file}" "${detail}"
+    return 0
+  elif [[ -n "${recursive_alias}" ]]; then
+    _report_yaml_parse_failure "${file}" "recursive YAML anchor in file"
+    return 0
+  fi
+
+  while IFS= read -r entry; do
+    document=$(jq -r '.document' <<< "${entry}")
+    selector=$(jq -r '.selector' <<< "${entry}")
+    document_selector="select(documentIndex == ${document}) | ${selector}"
+    extract_query="select(documentIndex == ${document}) | explode(.) | ${selector} | ${normalize}"
+    fallback_query="${document_selector} | ${normalize}"
+
+    if ! script=$(yq eval -e "${extract_query}" "${file}" 2> /dev/null); then
+      detail=$(yq eval -e "${extract_query}" "${file}" 2>&1 > /dev/null | head -1) || true
+      _log "$(echo -e "${text_yellow}! Could not extract the script specified in ${text_bold}${selector}${text_normal} found in ${file} with aliases/anchors resolved -> ${detail}${text_normal}\n")"
+      if ! script=$(yq eval -e "${fallback_query}" "${file}" 2> /dev/null); then
+        detail=$(yq eval -e "${fallback_query}" "${file}" 2>&1 > /dev/null | head -1) || true
+        _report_yaml_parse_failure "${file}" "${detail}"
         continue
       fi
     fi
-    if ! _scan_snippet "${file}" "${selector}" "${script}"; then
+    base=$(yq eval "${document_selector} | line" "${file}" 2> /dev/null) || base=1
+    [[ "${base}" =~ ^[0-9]+$ ]] || base=1
+    style=$(yq eval "${document_selector} | style" "${file}" 2> /dev/null) || style=""
+    kind=$(yq eval "${document_selector} | kind" "${file}" 2> /dev/null) || kind=""
+    # Pin ambiguous scripts to a real source position; offset only contiguous content.
+    mapping=fixed
+    if [[ "${kind}" == "seq" && "${style}" != "flow" ]]; then
+      item_count=$(yq eval "${document_selector} | length" "${file}" 2> /dev/null) || item_count=""
+      if [[ "${item_count}" == "0" ]]; then
+        mapping=offset
+      elif [[ "${item_count}" == "1" ]]; then
+        style=$(yq eval "${document_selector} | .[0] | style" "${file}" 2> /dev/null) || style=unknown
+        kind=$(yq eval "${document_selector} | .[0] | kind" "${file}" 2> /dev/null) || kind=""
+        if [[ "${kind}" == "scalar" && -z "${style}" && "${script}" != *$'\n'* ]]; then
+          mapping=offset
+        fi
+      fi
+    fi
+    if [[ "${kind}" == "scalar" ]]; then
+      if [[ "${style}" == "folded" ]]; then
+        base=$((base + 1))
+      elif [[ "${style}" == "literal" ]]; then
+        base=$((base + 1))
+        mapping=offset
+      fi
+    fi
+    if ! _scan_snippet "${file}" "${selector}" "${script}" "${base}" "${mapping}"; then
       if [[ "${SHELLSCAN_FORMAT}" == "human" ]]; then
         echo -e "${text_red}Above issue(s) found in ${file} in the script specified in ${text_bold}${selector}${text_normal}\n\n"
         echo SELECTOR_FAIL >> "${SHELLSCAN_RESULTS}"
       fi
     fi
     if [[ "${SHELLSCAN_SECURITY}" != "0" ]]; then
-      _security_scan_snippet "${file}" "${selector}" "${script}"
+      _security_scan_snippet "${file}" "${selector}" "${script}" "${base}" "${mapping}"
     fi
-  done
+  done <<< "${selectors}"
 }
 export -f _check_one_yaml_file
 
-# GitHub substitutes ${{ }} expressions into the script before any shell parses it — to the
-# linter they are static text, and same-length placeholders keep line and column positions
-# exact. A }} inside a quoted literal does not close the expression, and an expression may
-# span lines: the open line's tail and every wholly-inside line are blanked until the }} line.
+# GitHub Actions extraction
+
+# Mask GitHub expressions while preserving positions and quoted delimiters.
 _neutralize_gha_expressions() {
   local line prefix rest expr tail carry=0
   # shellcheck disable=SC2016 # single quotes match the literal ${{ and }} delimiters.
@@ -307,9 +338,7 @@ _neutralize_gha_expressions() {
 }
 export -f _neutralize_gha_expressions
 
-# The injection rules grep line by line, but a ${{ }} expression may span lines: joining each
-# continuation onto its opening line — blank lines left in place — keeps grep line numbers
-# exact while letting a single-line regex see the whole expression.
+# Join multiline expressions at their opening line for security matching.
 _collapse_gha_expressions() {
   local line open="" blanks=0 i
   # shellcheck disable=SC2016 # single quotes match the literal ${{ and }} delimiters.
@@ -341,10 +370,7 @@ _check_one_gha_file() {
   local file=$1
   echo FILE >> "${SHELLSCAN_RESULTS}"
 
-  # The document is exploded before path discovery so anchored steps and run aliases resolve;
-  # extraction and the shell cascade below explode the same way. Position queries (line, style,
-  # kind) run on the raw document instead: an exploded alias reports its use-site line but the
-  # anchor's style, which would misplace the +1 block-scalar offset.
+  # Resolve aliases for extraction; read raw positions to avoid anchor-style offsets.
   local query='explode(.) | ((.jobs.[], .runs) | select(tag=="!!map") | .steps.[] | select(tag=="!!map") | .run | select(tag=="!!str")) | path | ".[\"" + join("\"].[\"") + "\"]"'
   local selectors selector script detail base style kind mapping step job shell prog runner vals lint dialect w words
   if ! selectors=$(yq eval "${query}" "${file}" 2> /dev/null); then
@@ -359,9 +385,7 @@ _check_one_gha_file() {
   for selector in ${selectors}; do
     step=${selector%.\[\"run\"\]}
     job=${step%.\[\"steps\"\]*}
-    # Effective shell cascades step > job defaults > workflow defaults. GitHub accepts custom
-    # templates ("bash -leo pipefail {0}", "/bin/bash -e {0}", "env -S bash {0}") — match on
-    # the program basename, past env options and assignments, so no prefix dodges the scan.
+    # Resolve the effective shell, including custom templates and env wrappers.
     shell=$(yq eval "explode(.) | ${step}.[\"shell\"] // ${job}.[\"defaults\"].[\"run\"].[\"shell\"] // .defaults.run.shell // \"\"" "${file}" 2> /dev/null) || shell=""
     [[ "${shell}" == "null" ]] && shell=""
     prog=${shell%%[[:space:]]*}
@@ -379,17 +403,14 @@ _check_one_gha_file() {
         esac
       done
     fi
-    # The shellcheck pass only makes sense for POSIX-shell steps; the security scan below runs
-    # on every run script regardless — ${{ }} substitution is shell-agnostic.
+    # ShellCheck requires a POSIX shell; expression injection checks are shell-agnostic.
     lint=1
     dialect=bash
     case ${prog} in
       bash) ;;
       sh) dialect='sh' ;;
       '')
-        # No shell anywhere: GitHub defaults to bash except on Windows runners (pwsh). An
-        # expression-valued runner resolves against its matrix values — the shellcheck pass is
-        # skipped only when every candidate runner is Windows.
+        # Skip implicit-shell linting only when every resolved runner is Windows.
         runner=$(yq eval "explode(.) | ${job}.[\"runs-on\"] // \"\"" "${file}" 2> /dev/null) || runner=""
         # shellcheck disable=SC2016 # the arm matches a literal ${{ in the runner value.
         case ${runner} in
@@ -420,10 +441,7 @@ _check_one_gha_file() {
       _log "$(echo -e "${text_yellow}! Could not extract the run script specified in ${text_bold}${selector}${text_normal} found in ${file} -> ${detail}${text_normal}\n")"
       continue
     fi
-    # Literal (|) content starts one line below the run key. Aliased runs carry the anchor's
-    # content but the use-site's position; folded (>) scalars collapse source lines; quoted and
-    # plain scalars escape or fold theirs — all pin every finding to one line instead of a
-    # confidently wrong per-line offset.
+    # Literal blocks preserve line offsets; ambiguous scalars stay at their source position.
     base=$(yq eval "${selector} | line" "${file}" 2> /dev/null) || base=1
     [[ "${base}" =~ ^[0-9]+$ ]] || base=1
     style=$(yq eval "${selector} | style" "${file}" 2> /dev/null) || style=""
@@ -453,6 +471,8 @@ _check_one_gha_file() {
   done
 }
 export -f _check_one_gha_file
+
+# Scan execution
 
 _run() {
   local worker=$1
@@ -537,6 +557,8 @@ check_all() {
   check_shebang_files
   check_sh_files
 }
+
+# Report rendering
 
 _render() {
   local enriched baseline_set=""

@@ -1,0 +1,6 @@
+.command: &command
+  - *command
+
+recursive:
+  script:
+    - *command

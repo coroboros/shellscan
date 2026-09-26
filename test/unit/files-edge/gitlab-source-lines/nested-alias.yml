@@ -1,0 +1,6 @@
+.command: &command echo $CI_COMMIT_TITLE
+.commands: &commands
+  - *command
+
+nested:
+  script: *commands
